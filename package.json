@@ -1,15 +1,29 @@
 {
-  "name": "opencode-imp",
+  "name": "opencode-usage",
   "version": "0.1.0",
-  "description": "Usage tracking and model ranking CLI for opencode",
+  "description": "Usage tracking, cost estimation, and model ranking CLI for opencode",
   "type": "module",
   "bin": {
-    "opencode-imp": "./src/cli.ts"
+    "opencode-usage": "./src/cli.ts"
   },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agurod42/opencode-usage"
+  },
+  "keywords": [
+    "opencode",
+    "usage",
+    "cost",
+    "tokens",
+    "ai",
+    "llm"
+  ],
+  "author": "Agu Rodríguez <me@agu.uy>",
+  "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest"
   }
