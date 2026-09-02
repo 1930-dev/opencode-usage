@@ -5,6 +5,7 @@ import { providerStatuses } from "./providers.ts"
 import { usageTable, providersTable, fmtCost } from "./report.ts"
 import { buildTop } from "./top.ts"
 import { readBudgets, resolvePct } from "./budget.ts"
+import { limitsAsMap } from "./limits.ts"
 
 const USAGE = `opencode-imp — usage tracking and model ranking for opencode
 
@@ -69,9 +70,18 @@ async function cmdUsage(flags: Map<string, string | boolean>, json: boolean): Pr
       const live = await providerStatuses({ noNet: flags.has("--no-net") })
       const liveMap = new Map(live.map((s) => [s.provider, s.quota] as [string, any]))
       const monthCosts = monthlyUsageByProvider(db, startOfMonthMs())
+      const limits = limitsAsMap()
       const pctMap = new Map<string, { pct: number; source: string; label?: string }>()
       for (const r of rows) {
-        const p = resolvePct(r.provider, liveMap, await readBudgets(), monthCosts.get(r.provider) ?? 0)
+        const p = resolvePct(
+          r.provider,
+          liveMap,
+          budgets,
+          monthCosts.get(r.provider) ?? 0,
+          r.tokensInput + r.tokensOutput,
+          r.messages,
+          limits,
+        )
         if (p.pct > 0 || p.source !== "none") pctMap.set(r.provider, p)
       }
       pct = pctMap

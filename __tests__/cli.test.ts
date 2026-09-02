@@ -76,33 +76,26 @@ describe("parseZai", () => {
 })
 
 describe("resolvePct", () => {
-  const mockQuota = (budget: { percentUsed: number; label: string }) => ({
-    provider: "test",
-    ok: true,
-    windows: [],
-    budget: { percentUsed: budget.percentUsed, label: budget.label },
-    raw: undefined,
-    detail: undefined,
-  })
+  const emptyLimits = new Map<string, any>()
 
   it("returns live budget when available", () => {
-    const live = new Map([["opencode-go", { budget: { percentUsed: 62, label: "5h" }, ok: true, windows: [], provider: "opencode-go" }]])
-    const r = resolvePct("opencode-go", new Map([["opencode-go", { budget: { percentUsed: 62, label: "5h" }, ok: true, windows: [], provider: "opencode-go" }]]), {}, 0)
+    const live = new Map([["opencode-go", { budget: { percentUsed: 62, label: "5h" }, ok: true, windows: [], provider: "opencode-go", detail: undefined, raw: undefined }]])
+    const r = resolvePct("opencode-go", new Map([["opencode-go", { budget: { percentUsed: 62, label: "5h" }, ok: true, windows: [], provider: "opencode-go", detail: undefined, raw: undefined }]]), {}, 0, 0, 0, new Map())
     expect(r.pct).toBe(62)
     expect(r.source).toBe("live")
     expect(r.label).toBe("5h")
   })
   it("falls back to budgets.json", () => {
-    const r = resolvePct("digitalocean", new Map(), { digitalocean: 5 }, 2.5)
+    const r = resolvePct("digitalocean", new Map(), { digitalocean: 5 }, 2.5, 0, 0, new Map())
     expect(r.pct).toBe(50)
     expect(r.source).toBe("budgets")
   })
   it("returns none when no source", () => {
-    const r = resolvePct("unknown", new Map(), {}, 0)
+    const r = resolvePct("unknown", new Map(), {}, 0, 0, 0, new Map())
     expect(r.source).toBe("none")
   })
   it("prefers live over budgets", () => {
-    const r = resolvePct("opencode-go", new Map([["opencode-go", { budget: { percentUsed: 80, label: "5h" }, ok: true, windows: [], provider: "opencode-go" }]]), { "opencode-go": 10 }, 5)
+    const r = resolvePct("opencode-go", new Map([["opencode-go", { budget: { percentUsed: 80, label: "5h" }, ok: true, windows: [], provider: "opencode-go", detail: undefined, raw: undefined }]]), { "opencode-go": 10 }, 5, 0, 0, new Map())
     expect(r.pct).toBe(80)
     expect(r.source).toBe("live")
   })
