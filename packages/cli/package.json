@@ -1,0 +1,11 @@
+{
+  "name": "@opencode-usage/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "opencode-usage": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@opencode-usage/core": "*"
+  }
+}

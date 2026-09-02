@@ -1,18 +1,18 @@
 #!/usr/bin/env bun
-import { parseDuration, startOfDayMs, startOfMonthMs, type GroupBy } from "./types.ts"
-import { openDb, usageSince, usageTotals, localUsageByProvider, monthlyUsageByProvider } from "./db.ts"
-import { providerStatuses } from "./providers.ts"
-import { usageTable, providersTable, fmtCost } from "./report.ts"
-import { buildTop } from "./top.ts"
-import { readBudgets, resolvePct } from "./budget.ts"
-import { limitsAsMap } from "./limits.ts"
+import { parseDuration, startOfDayMs, startOfMonthMs, type GroupBy } from "@opencode-usage/core"
+import { openDb, usageSince, usageTotals, localUsageByProvider, getUsageSnapshot } from "@opencode-usage/core"
+import { providerStatuses } from "@opencode-usage/core"
+import { usageTable, providersTable, fmtCost } from "@opencode-usage/core"
+import { buildTop } from "@opencode-usage/core"
+import { readBudgets, resolvePct } from "@opencode-usage/core"
+import { limitsAsMap } from "@opencode-usage/core"
 
-const USAGE = `opencode-imp — usage tracking and model ranking for opencode
+const USAGE = `opencode-usage — usage tracking and model ranking for opencode
 
 USAGE
-  opencode-imp usage  [--since 7d] [--by provider|model|day|project|agent] [--today] [--pct] [--json]
-  opencode-imp providers [--no-net] [--json]
-  opencode-imp top [--limit 20] [--json]
+  opencode-usage usage  [--since 7d] [--by provider|model|day|project|agent] [--today] [--pct] [--json]
+  opencode-usage providers [--no-net] [--json]
+  opencode-usage top [--limit 20] [--json]
 
 OPTIONS
   --json      machine-readable output
@@ -23,7 +23,7 @@ OPTIONS
 `
 
 function fail(msg: string): never {
-  console.error(`opencode-imp: ${msg}\n`)
+  console.error(`opencode-usage: ${msg}\n`)
   process.exit(1)
   throw new Error("unreachable")
 }
@@ -60,44 +60,21 @@ async function cmdUsage(flags: Map<string, string | boolean>, json: boolean): Pr
   const withPct = flags.has("--pct")
   if (withPct && groupBy !== "provider") fail("--pct only supported with --by provider")
 
-  const db = openDb()
-  try {
-    const rows = usageSince(db, sinceMs, groupBy)
-    const totals = usageTotals(db, sinceMs)
-    let pct: Map<string, { pct: number; source: string; label?: string }> | undefined
-    if (withPct) {
-      const budgets = await readBudgets()
-      const live = await providerStatuses({ noNet: flags.has("--no-net") })
-      const liveMap = new Map(live.map((s) => [s.provider, s.quota] as [string, any]))
-      const monthCosts = monthlyUsageByProvider(db, startOfMonthMs())
-      const limits = limitsAsMap()
-      const pctMap = new Map<string, { pct: number; source: string; label?: string }>()
-      for (const r of rows) {
-        const p = resolvePct(
-          r.provider,
-          liveMap,
-          budgets,
-          monthCosts.get(r.provider) ?? 0,
-          r.tokensInput + r.tokensOutput,
-          r.messages,
-          limits,
-        )
-        if (p.pct > 0 || p.source !== "none") pctMap.set(r.provider, p)
-      }
-      pct = pctMap
+  const snapshot = await getUsageSnapshot(sinceMs, groupBy, withPct)
+  if (json) {
+    const out: any = {
+      since: new Date(sinceMs).toISOString(),
+      groupBy,
+      rows: snapshot.rows,
+      totals: snapshot.totals,
+      pct: snapshot.pct,
     }
-    if (json) {
-      const out: any = { since: new Date(sinceMs).toISOString(), groupBy, rows, totals }
-      if (withPct) out.pct = Object.fromEntries(pct!)
-      console.log(JSON.stringify(out, null, 2))
-    } else {
-      const label = flags.has("--today")
-        ? "today"
-        : (flags.get("--since") as string ?? "7d")
-      console.log(usageTable(rows, totals, label, groupBy, withPct ? pct : undefined))
-    }
-  } finally {
-    db.close()
+    console.log(JSON.stringify(out, null, 2))
+  } else {
+    const label = flags.has("--today")
+      ? "today"
+      : (flags.get("--since") as string ?? "7d")
+    console.log(usageTable(snapshot.rows, snapshot.totals, label, groupBy, snapshot.pct ? new Map(Object.entries(snapshot.pct)) : undefined))
   }
 }
 

@@ -4,7 +4,7 @@
   "description": "Usage tracking, cost estimation, and model ranking CLI for opencode",
   "type": "module",
   "bin": {
-    "opencode-usage": "./src/cli.ts"
+    "opencode-usage": "./packages/cli/src/cli.ts"
   },
   "scripts": {
     "test": "bun test",
@@ -25,6 +25,11 @@
   "author": "Agu Rodríguez <me@agu.uy>",
   "license": "MIT",
   "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.26",
+    "@opentui/solid": "^0.5.10",
     "@types/bun": "latest"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

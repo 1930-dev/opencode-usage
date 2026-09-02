@@ -15,11 +15,11 @@ export function authPath(): string {
 }
 
 export function cacheDir(): string {
-  return process.env.OPENCODE_IMP_CACHE ?? path.join(home(), ".cache/opencode-imp")
+  return process.env.OPENCODE_USAGE_CACHE ?? path.join(home(), ".cache/opencode-usage")
 }
 
 export function budgetsPath(): string {
-  return process.env.OPENCODE_IMP_BUDGETS ?? path.join(home(), ".config/opencode-imp/budgets.json")
+  return process.env.OPENCODE_USAGE_BUDGETS ?? path.join(home(), ".config/opencode-usage/budgets.json")
 }
 
 export function infisicalProjectId(): string {

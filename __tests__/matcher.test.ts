@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { buildMatcher } from "../src/ranking/matcher.ts"
+import { buildMatcher } from "../packages/core/src/ranking/matcher.ts"
 
 describe("matcher", () => {
   const aa = [

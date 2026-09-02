@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { blendedPrice, valueScore, formatSuffix } from "../src/ranking/metrics.ts"
+import { blendedPrice, valueScore, formatSuffix } from "../packages/core/src/ranking/metrics.ts"
 
 describe("metrics", () => {
   it("blendedPrice 3:1", () => {

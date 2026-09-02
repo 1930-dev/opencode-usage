@@ -1,0 +1,10 @@
+{
+  "name": "@opencode-usage/core",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./snapshot": "./src/snapshot.ts",
+    "./report": "./src/report.ts"
+  }
+}

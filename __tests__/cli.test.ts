@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test"
-import { parseDuration, startOfDayMs, startOfMonthMs } from "../src/types.ts"
-import { fmtTokens, fmtCost, fmtAgo } from "../src/report.ts"
-import { parseZai } from "../src/quota/zai.ts"
-import { resolvePct } from "../src/budget.ts"
+import { parseDuration, startOfDayMs, startOfMonthMs } from "../packages/core/src/types.ts"
+import { fmtTokens, fmtCost, fmtAgo } from "../packages/core/src/report.ts"
+import { parseZai } from "../packages/core/src/quota/zai.ts"
+import { resolvePct } from "../packages/core/src/budget.ts"
 
 describe("parseDuration", () => {
   it("parses h/d/w", () => {

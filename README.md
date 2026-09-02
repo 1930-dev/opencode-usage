@@ -8,7 +8,7 @@ Usage tracking, cost estimation, and model ranking CLI for [opencode](https://op
 git clone https://github.com/agurod42/opencode-usage
 cd opencode-usage
 bun install
-ln -s $(pwd)/src/cli.ts ~/.local/bin/opencode-usage
+ln -s $(pwd)/packages/cli/src/cli.ts ~/.local/bin/opencode-usage
 ```
 
 ## Usage
@@ -32,6 +32,18 @@ opencode-usage providers --no-net       # cached only
 opencode-usage top
 opencode-usage top --limit 10 --json
 ```
+
+## Plugin for opencode
+
+The `packages/plugin` package exposes a `/usage` slash command inside opencode that shows the same usage summary with progress-bar % budget rendering.
+
+To enable, create a symlink to `packages/plugin` in `~/.config/opencode/plugins/`:
+
+```bash
+ln -s "$(pwd)/packages/plugin" ~/.config/opencode/plugins/opencode-usage
+```
+
+The TUI plugin loads `core` via a relative import and the real install path is handled by Bun; the symlink is the only setup needed for the moment.
 
 ## % BUDGET (`--pct`)
 
@@ -91,9 +103,15 @@ Data from [Artificial Analysis](https://artificialanalysis.ai) (Intelligence Ind
 ## Development
 
 ```bash
-bun test          # run tests
-bunx tsc --noEmit # typecheck
+bun install        # install workspace deps
+bun test           # run tests
+bunx tsc --noEmit  # typecheck
 ```
+
+The workspace is a Bun monorepo with three packages:
+- `@opencode-usage/core` — shared data layer (SQLite, quotas, matching)
+- `@opencode-usage/cli` — the `opencode-usage` CLI
+- `@opencode-usage/plugin` — TUI plugin for opencode itself
 
 ## License
 

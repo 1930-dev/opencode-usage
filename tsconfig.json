@@ -9,7 +9,9 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/solid"
   },
-  "include": ["src/**/*.ts", "__tests__/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "__tests__/**/*.ts"]
 }
