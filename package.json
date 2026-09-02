@@ -1,0 +1,16 @@
+{
+  "name": "opencode-imp",
+  "version": "0.1.0",
+  "description": "Usage tracking and model ranking CLI for opencode",
+  "type": "module",
+  "bin": {
+    "opencode-imp": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
