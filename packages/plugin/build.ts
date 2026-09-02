@@ -1,16 +1,12 @@
-import { resolve } from "node:path"
-
-const OUT = resolve(import.meta.dir, "dist/opencode-usage.js")
-
 const result = await Bun.build({
-  entrypoints: [resolve(import.meta.dir, "tui.tsx")],
-  outfile: OUT,
+  entrypoints: ["./tui.tsx"],
+  outdir: "./dist",
   target: "bun",
   format: "esm",
+  packages: "external",
 })
-
 if (!result.success) {
   console.error(result.logs)
   process.exit(1)
 }
-console.log(`built ${OUT}`)
+console.log(`built ${result.outputs[0].path}`)
