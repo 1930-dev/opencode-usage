@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin } from "@opencode-ai/plugin/tui"
 
 const CLI = `${process.env.HOME}/Code/opencode-usage/packages/cli/src/cli.ts`
 
