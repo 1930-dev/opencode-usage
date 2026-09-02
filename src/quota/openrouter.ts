@@ -26,11 +26,14 @@ export async function fetchOpenRouter(key: string): Promise<ProviderQuota> {
     } catch {
       keyInfo = undefined
     }
-    const balance = credits.data.total_credits - credits.data.total_usage
+    const totalCredits = credits.data.total_credits
+    const totalUsage = credits.data.total_usage
+    const balance = totalCredits - totalUsage
+    const pct = totalCredits > 0 ? (totalUsage / totalCredits) * 100 : 0
     return {
       provider: "openrouter",
       ok: true,
-      detail: `balance $${balance.toFixed(2)} of $${credits.data.total_credits.toFixed(2)}`,
+      detail: `balance $${balance.toFixed(2)} of $${totalCredits.toFixed(2)}`,
       windows: keyInfo
         ? [
             { label: "daily", percentUsed: 0, detail: `$${keyInfo.usage_daily.toFixed(4)}` },
@@ -38,6 +41,7 @@ export async function fetchOpenRouter(key: string): Promise<ProviderQuota> {
             { label: "monthly", percentUsed: 0, detail: `$${keyInfo.usage_monthly.toFixed(4)}` },
           ]
         : [],
+      budget: totalCredits > 0 ? { percentUsed: pct, label: "credits" } : undefined,
       raw: { credits: credits.data, key: keyInfo },
     }
   } catch (err) {

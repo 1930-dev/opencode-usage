@@ -18,6 +18,10 @@ export function cacheDir(): string {
   return process.env.OPENCODE_IMP_CACHE ?? path.join(home(), ".cache/opencode-imp")
 }
 
+export function budgetsPath(): string {
+  return process.env.OPENCODE_IMP_BUDGETS ?? path.join(home(), ".config/opencode-imp/budgets.json")
+}
+
 export function infisicalProjectId(): string {
   return process.env.INFISICAL_PROJECT_ID ?? "***REMOVED***"
 }

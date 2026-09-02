@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
-import { parseDuration, startOfDayMs, type GroupBy } from "./types.ts"
-import { openDb, usageSince, usageTotals, localUsageByProvider } from "./db.ts"
+import { parseDuration, startOfDayMs, startOfMonthMs, type GroupBy } from "./types.ts"
+import { openDb, usageSince, usageTotals, localUsageByProvider, monthlyUsageByProvider } from "./db.ts"
 import { providerStatuses } from "./providers.ts"
 import { usageTable, providersTable, fmtCost } from "./report.ts"
 import { buildTop } from "./top.ts"
+import { readBudgets, resolvePct } from "./budget.ts"
 
 const USAGE = `opencode-imp — usage tracking and model ranking for opencode
 
 USAGE
-  opencode-imp usage  [--since 7d] [--by provider|model|day|project|agent] [--today] [--json]
+  opencode-imp usage  [--since 7d] [--by provider|model|day|project|agent] [--today] [--pct] [--json]
   opencode-imp providers [--no-net] [--json]
   opencode-imp top [--limit 20] [--json]
 
@@ -17,6 +18,7 @@ OPTIONS
   --no-net    skip live quota fetches (cache only)
   --today     shortcut for --since with start of today
   --since     lookback window: Nh, Nd or Nw (default 7d)
+  --pct       add % BUDGET column (requires --by provider)
 `
 
 function fail(msg: string): never {
@@ -54,18 +56,35 @@ async function cmdUsage(flags: Map<string, string | boolean>, json: boolean): Pr
       : Date.now() - parseDuration("7d")
   const groupBy = (typeof flags.get("--by") === "string" ? flags.get("--by") : "provider") as GroupBy
   if (!["provider", "model", "day", "project", "agent"].includes(groupBy)) fail(`invalid --by: ${groupBy}`)
+  const withPct = flags.has("--pct")
+  if (withPct && groupBy !== "provider") fail("--pct only supported with --by provider")
 
   const db = openDb()
   try {
     const rows = usageSince(db, sinceMs, groupBy)
     const totals = usageTotals(db, sinceMs)
+    let pct: Map<string, { pct: number; source: string; label?: string }> | undefined
+    if (withPct) {
+      const budgets = await readBudgets()
+      const live = await providerStatuses({ noNet: flags.has("--no-net") })
+      const liveMap = new Map(live.map((s) => [s.provider, s.quota] as [string, any]))
+      const monthCosts = monthlyUsageByProvider(db, startOfMonthMs())
+      const pctMap = new Map<string, { pct: number; source: string; label?: string }>()
+      for (const r of rows) {
+        const p = resolvePct(r.provider, liveMap, await readBudgets(), monthCosts.get(r.provider) ?? 0)
+        if (p.pct > 0 || p.source !== "none") pctMap.set(r.provider, p)
+      }
+      pct = pctMap
+    }
     if (json) {
-      console.log(JSON.stringify({ since: new Date(sinceMs).toISOString(), groupBy, rows, totals }, null, 2))
+      const out: any = { since: new Date(sinceMs).toISOString(), groupBy, rows, totals }
+      if (withPct) out.pct = Object.fromEntries(pct!)
+      console.log(JSON.stringify(out, null, 2))
     } else {
       const label = flags.has("--today")
         ? "today"
         : (flags.get("--since") as string ?? "7d")
-      console.log(usageTable(rows, totals, label, groupBy))
+      console.log(usageTable(rows, totals, label, groupBy, withPct ? pct : undefined))
     }
   } finally {
     db.close()

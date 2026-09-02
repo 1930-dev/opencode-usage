@@ -36,3 +36,10 @@ export function startOfDayMs(now = Date.now()): number {
   d.setHours(0, 0, 0, 0)
   return d.getTime()
 }
+
+export function startOfMonthMs(now = Date.now()): number {
+  const d = new Date(now)
+  d.setDate(1)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}

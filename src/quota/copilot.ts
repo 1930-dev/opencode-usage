@@ -7,6 +7,7 @@ interface CopilotSnapshot {
   entitlement: number
   overage_permitted: boolean
   token_based_billing?: boolean
+  remaining?: number
 }
 
 interface CopilotUser {
@@ -14,6 +15,16 @@ interface CopilotUser {
   copilot_plan: string
   quota_reset_date?: string
   quota_snapshots?: Record<string, CopilotSnapshot>
+}
+
+function premiumBudget(s: CopilotSnapshot): { percentUsed: number; label: string } | undefined {
+  if (s.unlimited && s.entitlement === 0) return undefined
+  const remaining = s.remaining ?? s.quota_remaining
+  if (remaining === undefined) return undefined
+  const entitlement = s.entitlement
+  if (entitlement <= 0) return undefined
+  const used = (entitlement - remaining) / entitlement * 100
+  return { percentUsed: used, label: "premium/mo" }
 }
 
 export async function fetchCopilot(token: string): Promise<ProviderQuota> {
@@ -35,11 +46,13 @@ export async function fetchCopilot(token: string): Promise<ProviderQuota> {
         resetsAt: data.quota_reset_date,
         detail: s.unlimited ? "unlimited" : `${s.quota_remaining} left of ${s.entitlement}`,
       }))
+    const budget = premiumBudget(snaps.premium_interactions) ?? premiumBudget(snaps.agent) ?? undefined
     return {
       provider: "github-copilot",
       ok: true,
       detail: `plan ${data.copilot_plan}`,
       windows,
+      budget,
       raw: data,
     }
   } catch (err) {

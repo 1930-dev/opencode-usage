@@ -19,6 +19,7 @@ export function parseZai(data: ZaiResponse): ProviderQuota {
     return { provider: "zai", ok: false, detail: data.msg ?? "quota endpoint error", windows: [] }
   }
   const limits = data.data?.limits ?? []
+  const budget = limits.length > 0 ? { percentUsed: limits[0].percentage ?? 0, label: limits[0].name ?? limits[0].limitType ?? "limit" } : undefined
   return {
     provider: "zai",
     ok: true,
@@ -28,6 +29,7 @@ export function parseZai(data: ZaiResponse): ProviderQuota {
       percentUsed: l.percentage ?? 0,
       resetsAt: l.nextResetTime ? new Date(l.nextResetTime).toISOString() : undefined,
     })),
+    budget,
     raw: data,
   }
 }

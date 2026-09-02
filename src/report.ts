@@ -33,17 +33,35 @@ function table(headers: string[], rows: string[][]): string {
   return [head, sep, body].join("\n")
 }
 
-export function usageTable(rows: UsageRow[], totals: UsageTotals, sinceLabel: string, groupBy: string): string {
+export function usageTable(
+  rows: UsageRow[],
+  totals: UsageTotals,
+  sinceLabel: string,
+  groupBy: string,
+  pct?: Map<string, { pct: number; source: string; label?: string }>,
+): string {
   const headers = [groupBy.toUpperCase(), "MSGS", "TOK IN", "TOK OUT", "EST COST"]
-  const body = rows.slice(0, 30).map((r) => [
-    r.group,
-    String(r.messages),
-    fmtTokens(r.tokensInput),
-    fmtTokens(r.tokensOutput),
-    fmtCost(r.cost),
-  ])
+  if (pct) headers.push("% BUDGET")
+  const body = rows.slice(0, 30).map((r) => {
+    const row = [
+      r.group,
+      String(r.messages),
+      fmtTokens(r.tokensInput),
+      fmtTokens(r.tokensOutput),
+      fmtCost(r.cost),
+    ]
+    if (pct) {
+      const p = pct.get(r.provider)
+      if (p) row.push(`${p.pct.toFixed(1)}%${p.label ? ` ${p.label}` : ""}`)
+      else row.push("—")
+    }
+    return row
+  })
   const t = table(headers, body)
-  return `${t}\n\nTOTAL since ${sinceLabel}: ${totals.messages} msgs, ${fmtTokens(totals.tokensInput)} in / ${fmtTokens(totals.tokensOutput)} out, ${fmtCost(totals.cost)} est.`
+  const sourceNote = pct
+    ? `\n[sources: ${[...pct.values()].map((p) => `${p.source}${p.label ? `(${p.label})` : ""}`).filter((v, i, a) => a.indexOf(v) === i).join(", ")}]`
+    : ""
+  return `${t}\n\nTOTAL since ${sinceLabel}: ${totals.messages} msgs, ${fmtTokens(totals.tokensInput)} in / ${fmtTokens(totals.tokensOutput)} out, ${fmtCost(totals.cost)} est.${sourceNote}`
 }
 
 export function providersTable(statuses: ProviderStatus[], local: Map<string, { messages: number; cost: number; lastUsedMs: number }>): string {

@@ -14,14 +14,17 @@ export async function fetchZen(key: string): Promise<ProviderQuota> {
       Authorization: `Bearer ${key}`,
     })) as ZenUsage
     const u = data.usage
+    const windows = [
+      { label: "5h", percentUsed: u.rolling.percent, resetsAt: u.rolling.resetsAt, status: u.rolling.status },
+      { label: "weekly", percentUsed: u.weekly.percent, resetsAt: u.weekly.resetsAt, status: u.weekly.status },
+      { label: "monthly", percentUsed: u.monthly.percent, resetsAt: u.monthly.resetsAt, status: u.monthly.status },
+    ]
+    const binding = windows.reduce((a, b) => (b.percentUsed > a.percentUsed ? b : a))
     return {
       provider: "opencode-go",
       ok: true,
-      windows: [
-        { label: "5h", percentUsed: u.rolling.percent, resetsAt: u.rolling.resetsAt, status: u.rolling.status },
-        { label: "weekly", percentUsed: u.weekly.percent, resetsAt: u.weekly.resetsAt, status: u.weekly.status },
-        { label: "monthly", percentUsed: u.monthly.percent, resetsAt: u.monthly.resetsAt, status: u.monthly.status },
-      ],
+      windows,
+      budget: { percentUsed: binding.percentUsed, label: binding.label },
       raw: data,
     }
   } catch (err) {

@@ -1,7 +1,8 @@
 import { describe, it, expect } from "bun:test"
-import { parseDuration, startOfDayMs } from "../src/types.ts"
+import { parseDuration, startOfDayMs, startOfMonthMs } from "../src/types.ts"
 import { fmtTokens, fmtCost, fmtAgo } from "../src/report.ts"
 import { parseZai } from "../src/quota/zai.ts"
+import { resolvePct } from "../src/budget.ts"
 
 describe("parseDuration", () => {
   it("parses h/d/w", () => {
@@ -21,6 +22,17 @@ describe("startOfDayMs", () => {
     const start = startOfDayMs(now.getTime())
     expect(new Date(start).getHours()).toBe(0)
     expect(new Date(start).getDate()).toBe(1)
+  })
+})
+
+describe("startOfMonthMs", () => {
+  it("returns first day midnight", () => {
+    const now = new Date("2026-09-15T15:44:00")
+    const start = startOfMonthMs(now.getTime())
+    const d = new Date(start)
+    expect(d.getDate()).toBe(1)
+    expect(d.getHours()).toBe(0)
+    expect(d.getMonth()).toBe(8) // September
   })
 })
 
@@ -60,5 +72,38 @@ describe("parseZai", () => {
     expect(r.ok).toBe(true)
     expect(r.windows[0]!.percentUsed).toBe(42)
     expect(r.windows[0]!.resetsAt).toBeDefined()
+  })
+})
+
+describe("resolvePct", () => {
+  const mockQuota = (budget: { percentUsed: number; label: string }) => ({
+    provider: "test",
+    ok: true,
+    windows: [],
+    budget: { percentUsed: budget.percentUsed, label: budget.label },
+    raw: undefined,
+    detail: undefined,
+  })
+
+  it("returns live budget when available", () => {
+    const live = new Map([["opencode-go", { budget: { percentUsed: 62, label: "5h" }, ok: true, windows: [], provider: "opencode-go" }]])
+    const r = resolvePct("opencode-go", new Map([["opencode-go", { budget: { percentUsed: 62, label: "5h" }, ok: true, windows: [], provider: "opencode-go" }]]), {}, 0)
+    expect(r.pct).toBe(62)
+    expect(r.source).toBe("live")
+    expect(r.label).toBe("5h")
+  })
+  it("falls back to budgets.json", () => {
+    const r = resolvePct("digitalocean", new Map(), { digitalocean: 5 }, 2.5)
+    expect(r.pct).toBe(50)
+    expect(r.source).toBe("budgets")
+  })
+  it("returns none when no source", () => {
+    const r = resolvePct("unknown", new Map(), {}, 0)
+    expect(r.source).toBe("none")
+  })
+  it("prefers live over budgets", () => {
+    const r = resolvePct("opencode-go", new Map([["opencode-go", { budget: { percentUsed: 80, label: "5h" }, ok: true, windows: [], provider: "opencode-go" }]]), { "opencode-go": 10 }, 5)
+    expect(r.pct).toBe(80)
+    expect(r.source).toBe("live")
   })
 })

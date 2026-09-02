@@ -12,6 +12,7 @@ export interface ProviderQuota {
   detail?: string
   windows: QuotaWindow[]
   raw?: unknown
+  budget?: { percentUsed: number; label: string }
 }
 
 export const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
