@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "bun packages/plugin/build.ts"
   },
   "repository": {
     "type": "git",
@@ -22,7 +23,7 @@
     "ai",
     "llm"
   ],
-  "author": "Agu Rodríguez <me@agu.uy>",
+  "author": "Agu Rodr\u00edguez <me@agu.uy>",
   "license": "MIT",
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.26",

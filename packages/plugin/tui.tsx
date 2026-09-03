@@ -1,39 +1,24 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiDialogStack, TuiPluginApi, TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { getUsageSnapshot, startOfDayMs } from "@opencode-usage/core"
 
-const CLI = `${process.env.HOME}/Code/opencode-usage/packages/cli/src/cli.ts`
+const COMMAND = "opencode-usage.show"
+const COLS = ["PROVIDER", "MSGS", "TOK IN", "TOK OUT", "EST COST", "% BUDGET"] as const
+const WIDTHS = [18, 6, 9, 9, 10, 26] as const
 
-interface UsageRow {
-  group: string
-  provider: string
-  messages: number
-  cost: number
-  tokensInput: number
-  tokensOutput: number
-}
-
-interface PctInfo {
-  pct: number
-  source: string
-  label?: string
-}
-
-interface UsageJson {
-  since: string
-  rows: UsageRow[]
-  totals: { messages: number; cost: number }
-  pct?: Record<string, PctInfo>
-}
-
-function fmtT(n: number): string {
+function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
 }
 
+function pad(s: string, w: number): string {
+  return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length)
+}
+
 function progressBar(pct: number, width = 14): string {
-  const filled = Math.round((Math.min(pct, 100) / 100) * width)
-  return "█".repeat(Math.max(0, filled)) + "░".repeat(Math.max(0, width - filled))
+  const filled = Math.round((Math.min(Math.max(pct, 0), 100) / 100) * width)
+  return "█".repeat(filled) + "░".repeat(width - filled)
 }
 
 function barColor(pct: number): string {
@@ -42,64 +27,107 @@ function barColor(pct: number): string {
   return "#4ade80"
 }
 
+type Snapshot = Awaited<ReturnType<typeof getUsageSnapshot>>
+
+function Frame(props: { api: TuiPluginApi; children: any }) {
+  const Dialog = props.api.ui.Dialog
+  return (
+    <Dialog size="xlarge" onClose={() => props.api.ui.dialog.clear()}>
+      <box flexDirection="column" padding={1}>
+        <text bold>Usage — today</text>
+        <text />
+        {props.children}
+      </box>
+    </Dialog>
+  )
+}
+
+function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
+  const header = COLS.map((c, i) => pad(c, WIDTHS[i]!)).join("  ")
+  const rule = "-".repeat(WIDTHS.reduce((a, w) => a + w, 0) + (COLS.length - 1) * 2)
+  return (
+    <Frame api={props.api}>
+      <text color="#888">{header}</text>
+      <text color="#555">{rule}</text>
+      {props.snapshot.rows.slice(0, 20).map((r) => {
+        const p = props.snapshot.pct?.[r.provider]
+        return (
+          <box flexDirection="row">
+            <text>{pad(r.provider, WIDTHS[0]!)}  </text>
+            <text>{pad(String(r.messages), WIDTHS[1]!)}  </text>
+            <text>{pad(fmtTokens(r.tokensInput), WIDTHS[2]!)}  </text>
+            <text>{pad(fmtTokens(r.tokensOutput), WIDTHS[3]!)}  </text>
+            <text>{pad(`$${r.cost.toFixed(2)}`, WIDTHS[4]!)}  </text>
+            {p ? (
+              <text>
+                <span fg={barColor(p.pct)}>{progressBar(p.pct)}</span>
+                {` ${p.pct.toFixed(0).padStart(3)}% ${p.label ?? p.source}`}
+              </text>
+            ) : (
+              <text color="#555">—</text>
+            )}
+          </box>
+        )
+      })}
+      <text />
+      <text bold>
+        {`TOTAL: ${props.snapshot.totals.messages} msgs, $${props.snapshot.totals.cost.toFixed(2)} est.`}
+      </text>
+    </Frame>
+  )
+}
+
+async function show(api: TuiPluginApi, dialog: TuiDialogStack): Promise<void> {
+  dialog.replace(() => (
+    <Frame api={api}>
+      <text color="#888">Loading usage…</text>
+    </Frame>
+  ))
+  let snapshot: Snapshot
+  try {
+    snapshot = await getUsageSnapshot(startOfDayMs(), "provider", true)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    dialog.replace(() => (
+      <Frame api={api}>
+        <text color="#f87171">Failed to read usage: {message}</text>
+      </Frame>
+    ))
+    return
+  }
+  dialog.replace(() => <Table api={api} snapshot={snapshot} />)
+}
+
 export const tui: TuiPlugin = async (api) => {
-  api.command.register(() => [
+  const keymap = api.keymap as unknown as {
+    registerLayer?: (layer: { commands: unknown[] }) => unknown
+  }
+  if (typeof keymap.registerLayer === "function") {
+    keymap.registerLayer({
+      commands: [
+        {
+          namespace: "palette",
+          name: COMMAND,
+          title: "Usage",
+          desc: "Show opencode usage and budget per provider",
+          category: "Usage",
+          slashName: "usage",
+          run: () => show(api, api.ui.dialog),
+        },
+      ],
+    })
+    return
+  }
+  api.command?.register(() => [
     {
-      title: "Show usage",
-      value: "opencode-usage.show",
+      title: "Usage",
+      description: "Show opencode usage and budget per provider",
+      value: COMMAND,
+      category: "Usage",
       slash: { name: "usage" },
-      onSelect: async (dialog) => {
-        const cols = ["PROVIDER", "MSGS", "TOK IN", "TOK OUT", "EST COST", "BUDGET"]
-        const widths = [20, 5, 8, 8, 10, 22]
-        const pad = (s: string, w: number) => (s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length))
-        const line = (cells: string[]) => cells.map((c, i) => pad(c, widths[i])).join("  ")
-
-        const proc = Bun.spawn(["bun", CLI, "usage", "--pct", "--today"], { stdout: "pipe", stderr: "pipe" })
-        const out = await new Response(proc.stdout).text()
-        await proc.exited
-
-        let snap: UsageJson
-        try {
-          snap = JSON.parse(out)
-        } catch {
-          dialog.replace(() => <text>Failed to load usage data — is opencode-usage installed?</text>)
-          return
-        }
-
-        dialog.replace(() => (
-          <api.ui.Dialog size="xlarge" onClose={() => api.ui.dialog.clear()}>
-            <box flexDirection="column" padding={1}>
-              <text bold>Usage — last 24h</text>
-              <text />
-              <text color="#888">{line(cols)}</text>
-              <text color="#555">{"-".repeat(cols.reduce((a, _, i) => a + widths[i]!, 0) + (cols.length - 1) * 2)}</text>
-              {snap.rows.slice(0, 20).map((r) => {
-                const p = snap.pct?.[r.provider]
-                return (
-                  <box flexDirection="row">
-                    <text width={20}>{r.provider.slice(0, 20)}</text>
-                    <text width={5}>{String(r.messages).padEnd(5)}</text>
-                    <text width={8}>{fmtT(r.tokensInput).padEnd(8)}</text>
-                    <text width={8}>{fmtT(r.tokensOutput).padEnd(8)}</text>
-                    <text width={10}>{`$${r.cost.toFixed(2)}`.padEnd(10)}</text>
-                    {p ? (
-                      <text>
-                        <span fg={barColor(p.pct)}>{progressBar(p.pct)}</span> {p.pct.toFixed(0)}% {p.label ?? p.source}
-                      </text>
-                    ) : (
-                      <text color="#555">—</text>
-                    )}
-                  </box>
-                )
-              })}
-              <text />
-              <text bold>TOTAL: {snap.totals.messages} msgs, ${snap.totals.cost.toFixed(2)} est.</text>
-            </box>
-          </api.ui.Dialog>
-        ))
-      },
+      onSelect: (dialog) => show(api, dialog ?? api.ui.dialog),
     },
   ])
 }
 
-export default { id: "opencode-usage", tui } as TuiPluginModule
+export default { id: "opencode-usage", tui } satisfies TuiPluginModule

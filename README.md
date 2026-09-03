@@ -35,15 +35,28 @@ opencode-usage top --limit 10 --json
 
 ## Plugin for opencode
 
-The `packages/plugin` package exposes a `/usage` slash command inside opencode that shows the same usage summary with progress-bar % budget rendering.
+The `packages/plugin` package adds a `/usage` slash command to the opencode TUI. It shows the
+same table as the CLI, with the % budget column drawn as a progress bar.
 
-To enable, create a symlink to `packages/plugin` in `~/.config/opencode/plugins/`:
+Build the bundle, then declare it in the TUI config:
 
 ```bash
-ln -s "$(pwd)/packages/plugin" ~/.config/opencode/plugins/opencode-usage
+bun run build   # writes packages/plugin/dist/opencode-usage.js
 ```
 
-The TUI plugin loads `core` via a relative import and the real install path is handled by Bun; the symlink is the only setup needed for the moment.
+```json
+// ~/.config/opencode/tui.json
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "plugin": ["/absolute/path/to/opencode-usage/packages/plugin/dist/opencode-usage.js"]
+}
+```
+
+TUI plugins go in `tui.json`, not in `opencode.json` and not in `~/.config/opencode/plugins/`.
+Both of those are loaded as *server* plugins, and opencode rejects this bundle there with
+`must default export an object with server()`.
+
+Restart opencode after a rebuild: the bundle is read once at start.
 
 ## % BUDGET (`--pct`)
 
