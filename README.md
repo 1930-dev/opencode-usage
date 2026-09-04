@@ -58,6 +58,17 @@ Both of those are loaded as *server* plugins, and opencode rejects this bundle t
 
 Restart opencode after a rebuild: the bundle is read once at start.
 
+### Iterating on the layout
+
+`bun run preview [width...]` renders the dialog headless with `@opentui/core`'s
+test renderer and prints the frame, so a layout change is visible without a
+restart of opencode. Two traps it catches:
+
+- the dialog frame is roughly 60 columns wide at its `large` size, and content
+  wider than that wraps instead of clipping;
+- text color is the `fg` prop. `color` is accepted and silently ignored, and
+  `span` carries no `fg` at all.
+
 ## % BUDGET (`--pct`)
 
 Normalized percentage of budget consumed per provider, from these sources (in priority):

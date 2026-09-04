@@ -9,7 +9,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun packages/plugin/build.ts"
+    "build": "bun packages/plugin/build.ts",
+    "preview": "bun run build && bun packages/plugin/preview.ts"
   },
   "repository": {
     "type": "git",
@@ -27,8 +28,10 @@
   "license": "MIT",
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.26",
+    "@opentui/core": "0.5.10",
     "@opentui/solid": "^0.5.10",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "solid-js": "^1.9.15"
   },
   "workspaces": [
     "packages/*"

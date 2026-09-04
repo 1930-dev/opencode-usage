@@ -4,14 +4,20 @@ import { getUsageSnapshot, startOfDayMs } from "@opencode-usage/core"
 
 const COMMAND = "opencode-usage.show"
 const BAR_WIDTH = 14
+
+/**
+ * The dialog frame is about 60 columns wide at its "large" size, so the table
+ * is built to 47 and the budget bar goes on its own line under each row. A
+ * wider table wraps inside the frame, which is unreadable.
+ */
 const COLS = [
-  { title: "PROVIDER", width: 18 },
-  { title: "MSGS", width: 6 },
-  { title: "TOK IN", width: 9 },
-  { title: "TOK OUT", width: 9 },
-  { title: "EST COST", width: 10 },
-  { title: "% BUDGET", width: 26 },
+  { title: "PROVIDER", width: 13, align: "left" },
+  { title: "MSGS", width: 5, align: "right" },
+  { title: "TOK IN", width: 8, align: "right" },
+  { title: "TOK OUT", width: 8, align: "right" },
+  { title: "COST", width: 9, align: "right" },
 ] as const
+const TABLE_WIDTH = COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1)
 
 type Snapshot = Awaited<ReturnType<typeof getUsageSnapshot>>
 
@@ -21,13 +27,19 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
-function pad(s: string, w: number): string {
-  return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length)
+function cell(s: string, i: number): string {
+  const { width, align } = COLS[i]!
+  const v = s.length > width ? s.slice(0, width) : s
+  return align === "right" ? v.padStart(width) : v.padEnd(width)
+}
+
+function line(values: string[]): string {
+  return values.map(cell).join(" ")
 }
 
 function progressBar(pct: number): string {
   const filled = Math.round((Math.min(Math.max(pct, 0), 100) / 100) * BAR_WIDTH)
-  return "█".repeat(filled) + "░".repeat(BAR_WIDTH - filled)
+  return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled)
 }
 
 /**
@@ -73,53 +85,48 @@ function barColor(pct: number, p: Palette): string {
 function Header(props: { palette: Palette }) {
   return (
     <box flexDirection="row" justifyContent="space-between">
-      <text bold>Usage — today</text>
-      <text color={props.palette.muted}>esc</text>
+      <text bold>{"Usage \u2014 today"}</text>
+      <text fg={props.palette.muted}>esc</text>
     </box>
   )
 }
 
-function Row(props: { snapshot: Snapshot; index: number; palette: Palette }) {
-  const r = () => props.snapshot.rows[props.index]!
-  const pct = () => props.snapshot.pct?.[r().provider]
-  const cells = () => [
-    pad(r().provider, COLS[0].width),
-    pad(String(r().messages), COLS[1].width),
-    pad(fmtTokens(r().tokensInput), COLS[2].width),
-    pad(fmtTokens(r().tokensOutput), COLS[3].width),
-    pad(`$${r().cost.toFixed(2)}`, COLS[4].width),
-  ]
+function Budget(props: { pct: number; label: string; palette: Palette }) {
   return (
     <box flexDirection="row">
-      <text color={props.palette.text}>{cells().join("  ") + "  "}</text>
-      {pct() ? (
-        <>
-          <text color={barColor(pct()!.pct, props.palette)}>{progressBar(pct()!.pct)}</text>
-          <text color={props.palette.muted}>
-            {` ${pct()!.pct.toFixed(0).padStart(3)}% ${pct()!.label ?? pct()!.source}`}
-          </text>
-        </>
-      ) : (
-        <text color={props.palette.subtle}>—</text>
-      )}
+      <text fg={props.palette.subtle}>{"  "}</text>
+      <text fg={barColor(props.pct, props.palette)}>{progressBar(props.pct)}</text>
+      <text fg={props.palette.muted}>{` ${props.pct.toFixed(0).padStart(3)}%  ${props.label}`}</text>
     </box>
   )
 }
 
-function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
+export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   const p = palette(props.api)
-  const header = COLS.map((c) => pad(c.title, c.width)).join("  ")
-  const rule = "─".repeat(COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1) * 2)
   const rows = props.snapshot.rows.slice(0, 20)
   return (
-    <box flexDirection="column">
+    <box flexDirection="column" flexShrink={0}>
       <Header palette={p} />
       <text />
-      <text color={p.muted}>{header}</text>
-      <text color={p.subtle}>{rule}</text>
-      {rows.map((_, i) => (
-        <Row snapshot={props.snapshot} index={i} palette={p} />
-      ))}
+      <text fg={p.muted} wrapMode="none">{line(COLS.map((c) => c.title))}</text>
+      <text fg={p.subtle} wrapMode="none">{"\u2500".repeat(TABLE_WIDTH)}</text>
+      {rows.map((r) => {
+        const budget = props.snapshot.pct?.[r.provider]
+        return (
+          <>
+            <text fg={p.text} wrapMode="none">
+              {line([
+                r.provider,
+                String(r.messages),
+                fmtTokens(r.tokensInput),
+                fmtTokens(r.tokensOutput),
+                `$${r.cost.toFixed(2)}`,
+              ])}
+            </text>
+            {budget ? <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} /> : null}
+          </>
+        )
+      })}
       <text />
       <text bold>
         {`TOTAL  ${props.snapshot.totals.messages} msgs  $${props.snapshot.totals.cost.toFixed(2)} est.`}
@@ -128,13 +135,13 @@ function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   )
 }
 
-function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
+export function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
   const p = palette(props.api)
   return (
-    <box flexDirection="column">
+    <box flexDirection="column" flexShrink={0}>
       <Header palette={p} />
       <text />
-      <text color={props.color ?? p.muted}>{props.text}</text>
+      <text fg={props.color ?? p.muted}>{props.text}</text>
     </box>
   )
 }

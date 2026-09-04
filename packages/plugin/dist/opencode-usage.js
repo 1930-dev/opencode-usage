@@ -507,13 +507,13 @@ import { jsx, jsxs, Fragment } from "@opentui/solid/jsx-runtime";
 var COMMAND = "opencode-usage.show";
 var BAR_WIDTH = 14;
 var COLS = [
-  { title: "PROVIDER", width: 18 },
-  { title: "MSGS", width: 6 },
-  { title: "TOK IN", width: 9 },
-  { title: "TOK OUT", width: 9 },
-  { title: "EST COST", width: 10 },
-  { title: "% BUDGET", width: 26 }
+  { title: "PROVIDER", width: 13, align: "left" },
+  { title: "MSGS", width: 5, align: "right" },
+  { title: "TOK IN", width: 8, align: "right" },
+  { title: "TOK OUT", width: 8, align: "right" },
+  { title: "COST", width: 9, align: "right" }
 ];
+var TABLE_WIDTH = COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1);
 function fmtTokens(n) {
   if (n >= 1e6)
     return `${(n / 1e6).toFixed(1)}M`;
@@ -521,8 +521,13 @@ function fmtTokens(n) {
     return `${(n / 1000).toFixed(1)}K`;
   return String(n);
 }
-function pad(s, w) {
-  return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length);
+function cell(s, i) {
+  const { width, align } = COLS[i];
+  const v = s.length > width ? s.slice(0, width) : s;
+  return align === "right" ? v.padStart(width) : v.padEnd(width);
+}
+function line(values) {
+  return values.map(cell).join(" ");
 }
 function progressBar(pct) {
   const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * BAR_WIDTH);
@@ -566,72 +571,75 @@ function Header(props) {
         children: "Usage \u2014 today"
       }),
       /* @__PURE__ */ jsx("text", {
-        color: props.palette.muted,
+        fg: props.palette.muted,
         children: "esc"
       })
     ]
   });
 }
-function Row(props) {
-  const r = () => props.snapshot.rows[props.index];
-  const pct = () => props.snapshot.pct?.[r().provider];
-  const cells = () => [
-    pad(r().provider, COLS[0].width),
-    pad(String(r().messages), COLS[1].width),
-    pad(fmtTokens(r().tokensInput), COLS[2].width),
-    pad(fmtTokens(r().tokensOutput), COLS[3].width),
-    pad(`$${r().cost.toFixed(2)}`, COLS[4].width)
-  ];
+function Budget(props) {
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "row",
     children: [
       /* @__PURE__ */ jsx("text", {
-        color: props.palette.text,
-        children: cells().join("  ") + "  "
+        fg: props.palette.subtle,
+        children: "  "
       }),
-      pct() ? /* @__PURE__ */ jsxs(Fragment, {
-        children: [
-          /* @__PURE__ */ jsx("text", {
-            color: barColor(pct().pct, props.palette),
-            children: progressBar(pct().pct)
-          }),
-          /* @__PURE__ */ jsx("text", {
-            color: props.palette.muted,
-            children: ` ${pct().pct.toFixed(0).padStart(3)}% ${pct().label ?? pct().source}`
-          })
-        ]
-      }) : /* @__PURE__ */ jsx("text", {
-        color: props.palette.subtle,
-        children: "\u2014"
+      /* @__PURE__ */ jsx("text", {
+        fg: barColor(props.pct, props.palette),
+        children: progressBar(props.pct)
+      }),
+      /* @__PURE__ */ jsx("text", {
+        fg: props.palette.muted,
+        children: ` ${props.pct.toFixed(0).padStart(3)}%  ${props.label}`
       })
     ]
   });
 }
 function Table(props) {
   const p = palette(props.api);
-  const header = COLS.map((c) => pad(c.title, c.width)).join("  ");
-  const rule = "\u2500".repeat(COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1) * 2);
   const rows = props.snapshot.rows.slice(0, 20);
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
+    flexShrink: 0,
     children: [
       /* @__PURE__ */ jsx(Header, {
         palette: p
       }),
       /* @__PURE__ */ jsx("text", {}),
       /* @__PURE__ */ jsx("text", {
-        color: p.muted,
-        children: header
+        fg: p.muted,
+        wrapMode: "none",
+        children: line(COLS.map((c) => c.title))
       }),
       /* @__PURE__ */ jsx("text", {
-        color: p.subtle,
-        children: rule
+        fg: p.subtle,
+        wrapMode: "none",
+        children: "\u2500".repeat(TABLE_WIDTH)
       }),
-      rows.map((_, i) => /* @__PURE__ */ jsx(Row, {
-        snapshot: props.snapshot,
-        index: i,
-        palette: p
-      })),
+      rows.map((r) => {
+        const budget2 = props.snapshot.pct?.[r.provider];
+        return /* @__PURE__ */ jsxs(Fragment, {
+          children: [
+            /* @__PURE__ */ jsx("text", {
+              fg: p.text,
+              wrapMode: "none",
+              children: line([
+                r.provider,
+                String(r.messages),
+                fmtTokens(r.tokensInput),
+                fmtTokens(r.tokensOutput),
+                `$${r.cost.toFixed(2)}`
+              ])
+            }),
+            budget2 ? /* @__PURE__ */ jsx(Budget, {
+              pct: budget2.pct,
+              label: budget2.label ?? budget2.source,
+              palette: p
+            }) : null
+          ]
+        });
+      }),
       /* @__PURE__ */ jsx("text", {}),
       /* @__PURE__ */ jsx("text", {
         bold: true,
@@ -644,13 +652,14 @@ function Message(props) {
   const p = palette(props.api);
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
+    flexShrink: 0,
     children: [
       /* @__PURE__ */ jsx(Header, {
         palette: p
       }),
       /* @__PURE__ */ jsx("text", {}),
       /* @__PURE__ */ jsx("text", {
-        color: props.color ?? p.muted,
+        fg: props.color ?? p.muted,
         children: props.text
       })
     ]
@@ -715,5 +724,7 @@ var tui = async (api) => {
 var tui_default = { id: "opencode-usage", tui };
 export {
   tui,
-  tui_default as default
+  tui_default as default,
+  Table,
+  Message
 };
