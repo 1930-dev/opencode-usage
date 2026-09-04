@@ -503,10 +503,17 @@ async function getUsageSnapshot(sinceMs, groupBy, includePct) {
   }
 }
 // packages/plugin/tui.tsx
-import { jsx, jsxs } from "@opentui/solid/jsx-runtime";
+import { jsx, jsxs, Fragment } from "@opentui/solid/jsx-runtime";
 var COMMAND = "opencode-usage.show";
-var COLS = ["PROVIDER", "MSGS", "TOK IN", "TOK OUT", "EST COST", "% BUDGET"];
-var WIDTHS = [18, 6, 9, 9, 10, 26];
+var BAR_WIDTH = 14;
+var COLS = [
+  { title: "PROVIDER", width: 18 },
+  { title: "MSGS", width: 6 },
+  { title: "TOK IN", width: 9 },
+  { title: "TOK OUT", width: 9 },
+  { title: "EST COST", width: 10 },
+  { title: "% BUDGET", width: 26 }
+];
 function fmtTokens(n) {
   if (n >= 1e6)
     return `${(n / 1e6).toFixed(1)}M`;
@@ -517,130 +524,157 @@ function fmtTokens(n) {
 function pad(s, w) {
   return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length);
 }
-function progressBar(pct, width = 14) {
-  const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * width);
-  return "\u2588".repeat(filled) + "\u2591".repeat(width - filled);
+function progressBar(pct) {
+  const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * BAR_WIDTH);
+  return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled);
 }
-function barColor(pct) {
+function toHex(color, fallback) {
+  if (typeof color === "string")
+    return color;
+  const c = color;
+  if (!c || typeof c.r !== "number" || typeof c.g !== "number" || typeof c.b !== "number")
+    return fallback;
+  const scale = c.r <= 1 && c.g <= 1 && c.b <= 1 ? 255 : 1;
+  const hex = (v) => Math.round(Math.min(Math.max(v * scale, 0), 255)).toString(16).padStart(2, "0");
+  return `#${hex(c.r)}${hex(c.g)}${hex(c.b)}`;
+}
+function palette(api) {
+  const t = api.theme?.current;
+  return {
+    text: toHex(t?.text, "#e5e5e5"),
+    muted: toHex(t?.textMuted, "#8a8a8a"),
+    subtle: toHex(t?.borderSubtle, "#4a4a4a"),
+    ok: toHex(t?.success, "#4ade80"),
+    warn: toHex(t?.warning, "#facc15"),
+    danger: toHex(t?.error, "#f87171")
+  };
+}
+function barColor(pct, p) {
   if (pct >= 90)
-    return "#f87171";
+    return p.danger;
   if (pct >= 70)
-    return "#facc15";
-  return "#4ade80";
+    return p.warn;
+  return p.ok;
 }
-function Frame(props) {
-  const Dialog = props.api.ui.Dialog;
-  return /* @__PURE__ */ jsx(Dialog, {
-    size: "xlarge",
-    onClose: () => props.api.ui.dialog.clear(),
-    children: /* @__PURE__ */ jsxs("box", {
-      flexDirection: "column",
-      padding: 1,
-      children: [
-        /* @__PURE__ */ jsx("text", {
-          bold: true,
-          children: "Usage \u2014 today"
-        }),
-        /* @__PURE__ */ jsx("text", {}),
-        props.children
-      ]
-    })
-  });
-}
-function Table(props) {
-  const header = COLS.map((c, i) => pad(c, WIDTHS[i])).join("  ");
-  const rule = "-".repeat(WIDTHS.reduce((a, w) => a + w, 0) + (COLS.length - 1) * 2);
-  return /* @__PURE__ */ jsxs(Frame, {
-    api: props.api,
+function Header(props) {
+  return /* @__PURE__ */ jsxs("box", {
+    flexDirection: "row",
+    justifyContent: "space-between",
     children: [
       /* @__PURE__ */ jsx("text", {
-        color: "#888",
-        children: header
-      }),
-      /* @__PURE__ */ jsx("text", {
-        color: "#555",
-        children: rule
-      }),
-      props.snapshot.rows.slice(0, 20).map((r) => {
-        const p = props.snapshot.pct?.[r.provider];
-        return /* @__PURE__ */ jsxs("box", {
-          flexDirection: "row",
-          children: [
-            /* @__PURE__ */ jsxs("text", {
-              children: [
-                pad(r.provider, WIDTHS[0]),
-                "  "
-              ]
-            }),
-            /* @__PURE__ */ jsxs("text", {
-              children: [
-                pad(String(r.messages), WIDTHS[1]),
-                "  "
-              ]
-            }),
-            /* @__PURE__ */ jsxs("text", {
-              children: [
-                pad(fmtTokens(r.tokensInput), WIDTHS[2]),
-                "  "
-              ]
-            }),
-            /* @__PURE__ */ jsxs("text", {
-              children: [
-                pad(fmtTokens(r.tokensOutput), WIDTHS[3]),
-                "  "
-              ]
-            }),
-            /* @__PURE__ */ jsxs("text", {
-              children: [
-                pad(`$${r.cost.toFixed(2)}`, WIDTHS[4]),
-                "  "
-              ]
-            }),
-            p ? /* @__PURE__ */ jsxs("text", {
-              children: [
-                /* @__PURE__ */ jsx("span", {
-                  fg: barColor(p.pct),
-                  children: progressBar(p.pct)
-                }),
-                ` ${p.pct.toFixed(0).padStart(3)}% ${p.label ?? p.source}`
-              ]
-            }) : /* @__PURE__ */ jsx("text", {
-              color: "#555",
-              children: "\u2014"
-            })
-          ]
-        });
-      }),
-      /* @__PURE__ */ jsx("text", {}),
-      /* @__PURE__ */ jsx("text", {
         bold: true,
-        children: `TOTAL: ${props.snapshot.totals.messages} msgs, $${props.snapshot.totals.cost.toFixed(2)} est.`
+        children: "Usage \u2014 today"
+      }),
+      /* @__PURE__ */ jsx("text", {
+        color: props.palette.muted,
+        children: "esc"
       })
     ]
   });
 }
+function Row(props) {
+  const r = () => props.snapshot.rows[props.index];
+  const pct = () => props.snapshot.pct?.[r().provider];
+  const cells = () => [
+    pad(r().provider, COLS[0].width),
+    pad(String(r().messages), COLS[1].width),
+    pad(fmtTokens(r().tokensInput), COLS[2].width),
+    pad(fmtTokens(r().tokensOutput), COLS[3].width),
+    pad(`$${r().cost.toFixed(2)}`, COLS[4].width)
+  ];
+  return /* @__PURE__ */ jsxs("box", {
+    flexDirection: "row",
+    children: [
+      /* @__PURE__ */ jsx("text", {
+        color: props.palette.text,
+        children: cells().join("  ") + "  "
+      }),
+      pct() ? /* @__PURE__ */ jsxs(Fragment, {
+        children: [
+          /* @__PURE__ */ jsx("text", {
+            color: barColor(pct().pct, props.palette),
+            children: progressBar(pct().pct)
+          }),
+          /* @__PURE__ */ jsx("text", {
+            color: props.palette.muted,
+            children: ` ${pct().pct.toFixed(0).padStart(3)}% ${pct().label ?? pct().source}`
+          })
+        ]
+      }) : /* @__PURE__ */ jsx("text", {
+        color: props.palette.subtle,
+        children: "\u2014"
+      })
+    ]
+  });
+}
+function Table(props) {
+  const p = palette(props.api);
+  const header = COLS.map((c) => pad(c.title, c.width)).join("  ");
+  const rule = "\u2500".repeat(COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1) * 2);
+  const rows = props.snapshot.rows.slice(0, 20);
+  return /* @__PURE__ */ jsxs("box", {
+    flexDirection: "column",
+    children: [
+      /* @__PURE__ */ jsx(Header, {
+        palette: p
+      }),
+      /* @__PURE__ */ jsx("text", {}),
+      /* @__PURE__ */ jsx("text", {
+        color: p.muted,
+        children: header
+      }),
+      /* @__PURE__ */ jsx("text", {
+        color: p.subtle,
+        children: rule
+      }),
+      rows.map((_, i) => /* @__PURE__ */ jsx(Row, {
+        snapshot: props.snapshot,
+        index: i,
+        palette: p
+      })),
+      /* @__PURE__ */ jsx("text", {}),
+      /* @__PURE__ */ jsx("text", {
+        bold: true,
+        children: `TOTAL  ${props.snapshot.totals.messages} msgs  $${props.snapshot.totals.cost.toFixed(2)} est.`
+      })
+    ]
+  });
+}
+function Message(props) {
+  const p = palette(props.api);
+  return /* @__PURE__ */ jsxs("box", {
+    flexDirection: "column",
+    children: [
+      /* @__PURE__ */ jsx(Header, {
+        palette: p
+      }),
+      /* @__PURE__ */ jsx("text", {}),
+      /* @__PURE__ */ jsx("text", {
+        color: props.color ?? p.muted,
+        children: props.text
+      })
+    ]
+  });
+}
+function fitSize(api, dialog) {
+  const width = api.renderer?.width ?? 128;
+  dialog.setSize(width >= 128 ? "xlarge" : width >= 96 ? "large" : "medium");
+}
 async function show(api, dialog) {
-  dialog.replace(() => /* @__PURE__ */ jsx(Frame, {
+  fitSize(api, dialog);
+  dialog.replace(() => /* @__PURE__ */ jsx(Message, {
     api,
-    children: /* @__PURE__ */ jsx("text", {
-      color: "#888",
-      children: "Loading usage\u2026"
-    })
+    text: "Loading usage\u2026"
   }));
   let snapshot2;
   try {
     snapshot2 = await getUsageSnapshot(startOfDayMs(), "provider", true);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    dialog.replace(() => /* @__PURE__ */ jsx(Frame, {
+    dialog.replace(() => /* @__PURE__ */ jsx(Message, {
       api,
-      children: /* @__PURE__ */ jsxs("text", {
-        color: "#f87171",
-        children: [
-          "Failed to read usage: ",
-          message
-        ]
-      })
+      text: `Failed to read usage: ${message}`,
+      color: palette(api).danger
     }));
     return;
   }
