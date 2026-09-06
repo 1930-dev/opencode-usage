@@ -7,17 +7,8 @@ Every connected provider in one table, with each one's remaining budget as a
 comparable percentage — whether the provider bills in tokens, requests, credits or
 neurons.
 
-```
- Usage — today                                                                      esc
-
- PROVIDER               MSGS   TOK IN  TOK OUT      COST BUDGET
- opencode-go               7        0        0     $0.00 ████████████ 100% weekly
- nvidia                   98    10.9M    19.9K     $0.00
- cloudflare-workers-ai     0        0        0     $0.00
- github-copilot            1     4.2K      830    $12.35 █████░░░░░░░  42% 1M tok/day
-
- TOTAL                   106                      $12.35
-```
+<!-- Absolute URL so the image also renders on npm, which resolves nothing relative. -->
+![The /usage dialog](https://raw.githubusercontent.com/1930-dev/opencode-usage/main/docs/demo.gif)
 
 [![npm](https://img.shields.io/npm/v/@1930dev/opencode-usage)](https://www.npmjs.com/package/@1930dev/opencode-usage)
 [![license](https://img.shields.io/npm/l/@1930dev/opencode-usage)](./LICENSE)
@@ -74,7 +65,22 @@ opencode-usage top --limit 10 --json
 ## Plugin for opencode
 
 The package also ships a `/usage` slash command for the opencode TUI. It shows the
-same table as the CLI, with the % budget column drawn as a progress bar.
+same table as the CLI, with the % budget column drawn as a progress bar:
+
+```
+ Usage — today                                                                      esc
+
+ PROVIDER               MSGS   TOK IN  TOK OUT      COST BUDGET
+ opencode-go               7        0        0     $0.00 ████████████ 100% weekly
+ nvidia                   98    10.9M    19.9K     $0.00
+ cloudflare-workers-ai     0        0        0     $0.00
+ github-copilot            1     4.2K      830    $12.35 █████░░░░░░░  42% 1M tok/day
+
+ TOTAL                   106                      $12.35
+```
+
+The dialog sizes itself to the terminal: a wide frame spells the budget labels out,
+a narrow one shortens them to the window (`wk`, `mo`, `d`).
 
 ```bash
 opencode plugin @1930dev/opencode-usage
