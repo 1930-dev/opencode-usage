@@ -4,9 +4,13 @@ coveragePathIgnorePatterns = ["__tests__/**"]
 coverageReporter = ["text"]
 coverageSkipTestFiles = true
 
-# Every line of every source file must run. The function metric sits a shade
-# under 1 because Bun counts two entities that own no line of their own — with
-# no uncovered line anywhere, there is no source function left untested.
+# Bun applies this to each file, not to the total. Every line of every source
+# file runs, so 1.0 holds and a new untested branch fails the build.
+#
+# There is deliberately no `functions` threshold. Bun counts two entities that
+# own no line — one in cli/src/main.ts, one in plugin/tui.tsx — so the metric
+# cannot reach 1.0, and the highest value that passes every file (0.93) would
+# admit a whole untested function. The line gate already catches one, because a
+# new function brings new lines with it.
 [test.coverageThreshold]
 lines = 1.0
-functions = 0.99
