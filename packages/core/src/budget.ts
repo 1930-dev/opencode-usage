@@ -21,7 +21,7 @@ export interface PctResult {
   label?: string
 }
 
-function pctFromLimit(provider: string, limit: ProviderLimit, usageTokens: number, usageRequests: number, isMonthly: boolean): number | undefined {
+function pctFromLimit(limit: ProviderLimit, usageTokens: number, usageRequests: number): number | undefined {
   if (limit.limit <= 0) return undefined
   const effectiveLimit = limit.metric.endsWith("/day") && limit.metric !== "neurons/day"
     ? limit.limit * 30
@@ -42,12 +42,6 @@ function pctFromLimit(provider: string, limit: ProviderLimit, usageTokens: numbe
   }
 }
 
-export interface PctResult {
-  pct: number
-  source: "live" | "budgets" | "limits" | "none"
-  label?: string
-}
-
 export function resolvePct(
   provider: string,
   live: Map<string, ProviderQuota>,
@@ -56,7 +50,7 @@ export function resolvePct(
   usageTokens: number,
   usageRequests: number,
   limits: Map<string, ProviderLimit>,
-): { pct: number; source: "live" | "budgets" | "limits" | "none"; label?: string } {
+): PctResult {
   const liveQ = live.get(provider)
   if (liveQ?.budget && liveQ.ok) {
     return { pct: liveQ.budget.percentUsed, source: "live", label: liveQ.budget.label }
@@ -68,7 +62,7 @@ export function resolvePct(
   }
   const limit = limits.get(provider)
   if (limit) {
-    const pct = pctFromLimit(provider, limit, usageTokens, usageRequests, true)
+    const pct = pctFromLimit(limit, usageTokens, usageRequests)
     if (pct !== undefined) {
       return { pct, source: "limits", label: `${limit.limit.toLocaleString()} ${limit.unit}/${limit.metric.split("/")[1]}` }
     }
