@@ -67,8 +67,12 @@ restart of opencode. Two traps it catches:
 
 - the frame is 60, 88 or 116 columns wide for `medium`, `large` and `xlarge`,
   clamped to the terminal width minus 2, and content wider than that wraps
-  instead of clipping. The stack resets to `medium`, and `setSize` only takes
-  effect when it is called from inside the mounted component;
+  instead of clipping. The stack resets to `medium` on every open, and
+  `setSize` only takes effect when called from inside the mounted component;
+- the plugin must not import `solid-js` itself. The host maps that specifier to
+  its own instance at runtime, but a bundle resolving a second copy gets its
+  reactive calls dropped with no error — which is why the size is set from the
+  component body and not from `onMount`;
 - text color is the `fg` prop. `color` is accepted and silently ignored, and
   `span` carries no `fg` at all.
 

@@ -1,7 +1,4 @@
 // @bun
-// packages/plugin/tui.tsx
-import { onMount } from "solid-js";
-
 // packages/core/src/types.ts
 function startOfDayMs(now = Date.now()) {
   const d = new Date(now);
@@ -538,11 +535,11 @@ var PADDING = 1;
 function columnsFor(inner) {
   const wide = inner >= 80;
   const base = wide ? [
-    { title: "PROVIDER", width: 22, align: "left" },
+    { title: "PROVIDER", width: 21, align: "left" },
     { title: "MSGS", width: 5, align: "right" },
     { title: "TOK IN", width: 8, align: "right" },
     { title: "TOK OUT", width: 8, align: "right" },
-    { title: "COST", width: 10, align: "right" }
+    { title: "COST", width: 9, align: "right" }
   ] : [
     { title: "PROVIDER", width: 15, align: "left" },
     { title: "MSGS", width: 4, align: "right" },
@@ -552,7 +549,7 @@ function columnsFor(inner) {
   ];
   const used = base.reduce((a, c) => a + c.width, 0) + base.length;
   const budget2 = Math.max(14, inner - used);
-  return { cols: [...base, { title: "BUDGET", width: budget2, align: "left" }], bar: wide ? 12 : 6 };
+  return { cols: [...base, { title: "BUDGET", width: budget2, align: "left" }], bar: wide ? WIDE_BAR : COMPACT_BAR };
 }
 function fmtTokens(n) {
   if (n >= 1e6)
@@ -571,6 +568,21 @@ function row(cols, values) {
 function progressBar(pct, width) {
   const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * width);
   return "\u2588".repeat(filled) + "\u2591".repeat(width - filled);
+}
+var WIDE_BAR = 12;
+var COMPACT_BAR = 6;
+var BUDGET_FIXED = WIDE_BAR + 6;
+function compactLabel(label) {
+  return label.replace(/\b\d[\d,]*\b/g, (n) => {
+    const v = Number(n.replace(/,/g, ""));
+    if (!Number.isFinite(v))
+      return n;
+    if (v >= 1e6)
+      return `${+(v / 1e6).toFixed(1)}M`;
+    if (v >= 1000)
+      return `${+(v / 1000).toFixed(1)}K`;
+    return String(v);
+  }).replace(/\btokens\b/g, "tok").replace(/\brequests\b/g, "req");
 }
 function windowSuffix(label) {
   const l = label.toLowerCase();
@@ -618,22 +630,30 @@ function barColor(pct, p) {
     return p.warn;
   return p.ok;
 }
-function chooseSize(terminal) {
-  if (terminal >= SIZE_WIDTH.xlarge + 2)
+function chooseSize(terminal, needed) {
+  const held = (s) => terminal >= SIZE_WIDTH[s] + 2;
+  if (held("large") && SIZE_WIDTH.large - PADDING * 2 >= needed)
+    return "large";
+  if (held("xlarge"))
     return "xlarge";
-  if (terminal >= SIZE_WIDTH.large + 2)
+  if (held("large"))
     return "large";
   return "medium";
 }
-function innerWidth(api) {
-  const terminal = api.renderer?.width ?? SIZE_WIDTH.medium;
-  return Math.min(SIZE_WIDTH[chooseSize(terminal)], terminal - 2) - PADDING * 2;
+function widthNeeded(longestLabel) {
+  const { cols } = columnsFor(SIZE_WIDTH.xlarge);
+  const base = cols.slice(0, -1).reduce((a, c) => a + c.width, 0) + cols.length - 1;
+  return base + BUDGET_FIXED + longestLabel;
+}
+function terminalWidth(api) {
+  return api.renderer?.width ?? SIZE_WIDTH.medium;
+}
+function innerWidth(api, needed) {
+  const terminal = terminalWidth(api);
+  return Math.min(SIZE_WIDTH[chooseSize(terminal, needed)], terminal - 2) - PADDING * 2;
 }
 function Frame(props) {
-  onMount(() => {
-    const w = props.api.renderer?.width ?? SIZE_WIDTH.medium;
-    props.api.ui.dialog.setSize(chooseSize(w));
-  });
+  props.api.ui.dialog.setSize(chooseSize(terminalWidth(props.api), props.needed));
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
     flexShrink: 0,
@@ -663,7 +683,8 @@ function Budget(props) {
   const tail = () => {
     const head = ` ${props.pct.toFixed(0).padStart(3)}% `;
     const room = props.col.width - props.bar - head.length;
-    const label = props.label.length <= room ? props.label : windowSuffix(props.label);
+    const compact = compactLabel(props.label);
+    const label = compact.length <= room ? compact : windowSuffix(props.label);
     return (head + label).slice(0, props.col.width - props.bar);
   };
   return /* @__PURE__ */ jsxs("box", {
@@ -684,7 +705,8 @@ function Budget(props) {
 }
 function Table(props) {
   const p = palette(props.api);
-  const layout = () => columnsFor(innerWidth(props.api));
+  const needed = widthNeeded(Math.max(0, ...Object.values(props.snapshot.pct ?? {}).map((b) => compactLabel(b.label ?? b.source).length)));
+  const layout = () => columnsFor(innerWidth(props.api, needed));
   const lead = (cols, r) => row(cols, [
     r.provider,
     String(r.messages),
@@ -695,6 +717,7 @@ function Table(props) {
   return /* @__PURE__ */ jsxs(Frame, {
     api: props.api,
     palette: p,
+    needed,
     children: [
       /* @__PURE__ */ jsx("text", {
         fg: p.accent,
@@ -742,6 +765,7 @@ function Message(props) {
   return /* @__PURE__ */ jsx(Frame, {
     api: props.api,
     palette: p,
+    needed: 0,
     children: /* @__PURE__ */ jsx("text", {
       fg: props.color ?? p.muted,
       wrapMode: "none",

@@ -1,6 +1,5 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiDialogStack, TuiPluginApi, TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { onMount } from "solid-js"
 import { getUsageSnapshot, startOfDayMs } from "@opencode-usage/core"
 
 const COMMAND = "opencode-usage.show"
@@ -27,11 +26,11 @@ function columnsFor(inner: number): { cols: Col[]; bar: number } {
   const wide = inner >= 80
   const base: Col[] = wide
     ? [
-        { title: "PROVIDER", width: 22, align: "left" },
+        { title: "PROVIDER", width: 21, align: "left" },
         { title: "MSGS", width: 5, align: "right" },
         { title: "TOK IN", width: 8, align: "right" },
         { title: "TOK OUT", width: 8, align: "right" },
-        { title: "COST", width: 10, align: "right" },
+        { title: "COST", width: 9, align: "right" },
       ]
     : [
         { title: "PROVIDER", width: 15, align: "left" },
@@ -42,7 +41,7 @@ function columnsFor(inner: number): { cols: Col[]; bar: number } {
       ]
   const used = base.reduce((a, c) => a + c.width, 0) + base.length
   const budget = Math.max(14, inner - used)
-  return { cols: [...base, { title: "BUDGET", width: budget, align: "left" }], bar: wide ? 12 : 6 }
+  return { cols: [...base, { title: "BUDGET", width: budget, align: "left" }], bar: wide ? WIDE_BAR : COMPACT_BAR }
 }
 
 function fmtTokens(n: number): string {
@@ -63,6 +62,29 @@ function row(cols: Col[], values: string[]): string {
 function progressBar(pct: number, width: number): string {
   const filled = Math.round((Math.min(Math.max(pct, 0), 100) / 100) * width)
   return "█".repeat(filled) + "░".repeat(width - filled)
+}
+
+const WIDE_BAR = 12
+const COMPACT_BAR = 6
+/** The bar plus " 100% " that sits before the label in the budget column. */
+const BUDGET_FIXED = WIDE_BAR + 6
+
+/**
+ * Documented limits arrive spelled out — "1,000,000 tokens/day". Written that
+ * way the table needs a 116-column frame for one column of digits, so the
+ * magnitudes are shortened and the nouns clipped.
+ */
+function compactLabel(label: string): string {
+  return label
+    .replace(/\b\d[\d,]*\b/g, (n) => {
+      const v = Number(n.replace(/,/g, ""))
+      if (!Number.isFinite(v)) return n
+      if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
+      if (v >= 1_000) return `${+(v / 1_000).toFixed(1)}K`
+      return String(v)
+    })
+    .replace(/\btokens\b/g, "tok")
+    .replace(/\brequests\b/g, "req")
 }
 
 /**
@@ -126,14 +148,25 @@ function barColor(pct: number, p: Palette): string {
 }
 
 /**
- * The size the frame should take. The thresholds are the width each size needs
- * before the host clamps it to the terminal, so asking for a larger one buys
- * nothing.
+ * The smallest frame that holds the content. Frame sizes are discrete, so a
+ * table needing 80 columns in a 116-column frame is 36 columns of dead space:
+ * the wide profile is built to fit `large`, and `xlarge` is only asked for when
+ * an unusually long label makes it necessary. A size the terminal cannot hold
+ * is clamped by the host, so asking for it buys nothing.
  */
-function chooseSize(terminal: number): keyof typeof SIZE_WIDTH {
-  if (terminal >= SIZE_WIDTH.xlarge + 2) return "xlarge"
-  if (terminal >= SIZE_WIDTH.large + 2) return "large"
+function chooseSize(terminal: number, needed: number): keyof typeof SIZE_WIDTH {
+  const held = (s: keyof typeof SIZE_WIDTH) => terminal >= SIZE_WIDTH[s] + 2
+  if (held("large") && SIZE_WIDTH.large - PADDING * 2 >= needed) return "large"
+  if (held("xlarge")) return "xlarge"
+  if (held("large")) return "large"
   return "medium"
+}
+
+/** Columns the wide profile needs to show `label` in full. */
+function widthNeeded(longestLabel: number): number {
+  const { cols } = columnsFor(SIZE_WIDTH.xlarge)
+  const base = cols.slice(0, -1).reduce((a, c) => a + c.width, 0) + cols.length - 1
+  return base + BUDGET_FIXED + longestLabel
 }
 
 /**
@@ -141,18 +174,22 @@ function chooseSize(terminal: number): keyof typeof SIZE_WIDTH {
  * read back from `dialog.size`: that getter is not reactive, so a render would
  * lay out against the size the stack had before this dialog raised it.
  */
-function innerWidth(api: TuiPluginApi): number {
-  const terminal = (api.renderer as { width?: number } | undefined)?.width ?? SIZE_WIDTH.medium
-  return Math.min(SIZE_WIDTH[chooseSize(terminal)], terminal - 2) - PADDING * 2
+function terminalWidth(api: TuiPluginApi): number {
+  return (api.renderer as { width?: number } | undefined)?.width ?? SIZE_WIDTH.medium
 }
 
-function Frame(props: { api: TuiPluginApi; palette: Palette; children: any }) {
-  // The host resets the stack to "medium" and the internal plugins raise it from
-  // inside the mounted component, so this cannot move to the command handler.
-  onMount(() => {
-    const w = (props.api.renderer as { width?: number } | undefined)?.width ?? SIZE_WIDTH.medium
-    props.api.ui.dialog.setSize(chooseSize(w))
-  })
+function innerWidth(api: TuiPluginApi, needed: number): number {
+  const terminal = terminalWidth(api)
+  return Math.min(SIZE_WIDTH[chooseSize(terminal, needed)], terminal - 2) - PADDING * 2
+}
+
+function Frame(props: { api: TuiPluginApi; palette: Palette; needed: number; children: any }) {
+  // The host resets the stack to "medium" and only honours setSize from inside
+  // the mounted component, so this cannot move to the command handler. It runs
+  // in the component body rather than onMount so the plugin needs no solid-js
+  // import: that would be a second copy of solid, whose owner the host's
+  // instance does not recognise, and the call would be dropped silently.
+  props.api.ui.dialog.setSize(chooseSize(terminalWidth(props.api), props.needed))
   return (
     <box flexDirection="column" flexShrink={0} padding={PADDING}>
       <box flexDirection="row" justifyContent="space-between">
@@ -171,7 +208,8 @@ function Budget(props: { pct: number; label: string; palette: Palette; col: Col;
   const tail = () => {
     const head = ` ${props.pct.toFixed(0).padStart(3)}% `
     const room = props.col.width - props.bar - head.length
-    const label = props.label.length <= room ? props.label : windowSuffix(props.label)
+    const compact = compactLabel(props.label)
+    const label = compact.length <= room ? compact : windowSuffix(props.label)
     return (head + label).slice(0, props.col.width - props.bar)
   }
   return (
@@ -188,7 +226,10 @@ function Budget(props: { pct: number; label: string; palette: Palette; col: Col;
 
 export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   const p = palette(props.api)
-  const layout = () => columnsFor(innerWidth(props.api))
+  const needed = widthNeeded(
+    Math.max(0, ...Object.values(props.snapshot.pct ?? {}).map((b) => compactLabel(b.label ?? b.source).length)),
+  )
+  const layout = () => columnsFor(innerWidth(props.api, needed))
   const lead = (cols: Col[], r: Snapshot["rows"][number]) =>
     row(cols, [
       r.provider,
@@ -198,7 +239,7 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
       `$${r.cost.toFixed(2)}`,
     ]).trimEnd().padEnd(cols.slice(0, -1).reduce((a, c) => a + c.width, 0) + cols.length - 2) + " "
   return (
-    <Frame api={props.api} palette={p}>
+    <Frame api={props.api} palette={p} needed={needed}>
       <text fg={p.accent} wrapMode="none">
         {row(layout().cols, layout().cols.map((c) => c.title))}
       </text>
@@ -238,7 +279,7 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
 export function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
   const p = palette(props.api)
   return (
-    <Frame api={props.api} palette={p}>
+    <Frame api={props.api} palette={p} needed={0}>
       <text fg={props.color ?? p.muted} wrapMode="none">
         {props.text}
       </text>
