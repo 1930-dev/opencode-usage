@@ -5,11 +5,10 @@ Usage tracking, cost estimation, and model ranking CLI for [opencode](https://op
 ## Install
 
 ```bash
-git clone https://github.com/agurod42/opencode-usage
-cd opencode-usage
-bun install
-ln -s $(pwd)/packages/cli/src/cli.ts ~/.local/bin/opencode-usage
+npm install -g @agurod42/opencode-usage   # the opencode-usage CLI
 ```
+
+Requires [Bun](https://bun.sh): the CLI reads opencode's SQLite through `bun:sqlite`.
 
 ## Usage
 
@@ -36,45 +35,39 @@ opencode-usage top --limit 10 --json
 
 ## Plugin for opencode
 
-The `packages/plugin` package adds a `/usage` slash command to the opencode TUI. It shows the
+The package also ships a `/usage` slash command for the opencode TUI. It shows the
 same table as the CLI, with the % budget column drawn as a progress bar.
 
-Build the bundle, then declare it in the TUI config:
-
 ```bash
-bun run build   # writes packages/plugin/dist/opencode-usage.js
+opencode plugin @agurod42/opencode-usage
 ```
 
+That installs the package and writes it into `~/.config/opencode/tui.json`. To do it
+by hand:
+
 ```json
-// ~/.config/opencode/tui.json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["/absolute/path/to/opencode-usage/packages/plugin/dist/opencode-usage.js"]
+  "plugin": ["@agurod42/opencode-usage"]
 }
 ```
 
-TUI plugins go in `tui.json`, not in `opencode.json` and not in `~/.config/opencode/plugins/`.
-Both of those are loaded as *server* plugins, and opencode rejects this bundle there with
+TUI plugins go in `tui.json`, not in `opencode.json` and not in
+`~/.config/opencode/plugins/`. Both of those are loaded as *server* plugins, and
+opencode rejects a TUI-only module there with
 `must default export an object with server()`.
 
+To run it from a clone instead, build first and point `tui.json` at the bundle:
+
+```bash
+bun install && bun run build
+```
+
+```json
+{ "plugin": ["/absolute/path/to/opencode-usage/dist/tui.js"] }
+```
+
 Restart opencode after a rebuild: the bundle is read once at start.
-
-### Iterating on the layout
-
-`bun run preview [width...]` renders the dialog headless with `@opentui/core`'s
-test renderer and prints the frame, so a layout change is visible without a
-restart of opencode. Two traps it catches:
-
-- the frame is 60, 88 or 116 columns wide for `medium`, `large` and `xlarge`,
-  clamped to the terminal width minus 2, and content wider than that wraps
-  instead of clipping. The stack resets to `medium` on every open, and
-  `setSize` only takes effect when called from inside the mounted component;
-- the plugin must not import `solid-js` itself. The host maps that specifier to
-  its own instance at runtime, but a bundle resolving a second copy gets its
-  reactive calls dropped with no error — which is why the size is set from the
-  component body and not from `onMount`;
-- text color is the `fg` prop. `color` is accepted and silently ignored, and
-  `span` carries no `fg` at all.
 
 ## % BUDGET (`--pct`)
 
@@ -129,7 +122,9 @@ Data from [Artificial Analysis](https://artificialanalysis.ai) (Intelligence Ind
 - `OPENCODE_AUTH_PATH` — override auth.json path
 - `OPENCODE_IMP_CACHE` — cache directory (default `~/.cache/opencode-usage`)
 - `OPENCODE_IMP_BUDGETS` — budgets.json path
-- `INFISICAL_PROJECT_ID` — for Artificial Analysis API key (default: project ID for this repo)
+- `AA_API_KEY` — Artificial Analysis API key, used by `top`. Without it, ranking is skipped
+- `INFISICAL_PROJECT_ID` — optional: read `AA_API_KEY` from Infisical through the
+  `infisical-secret` wrapper instead of from the environment
 
 ## Development
 

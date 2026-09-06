@@ -21,7 +21,3 @@ export function cacheDir(): string {
 export function budgetsPath(): string {
   return process.env.OPENCODE_USAGE_BUDGETS ?? path.join(home(), ".config/opencode-usage/budgets.json")
 }
-
-export function infisicalProjectId(): string {
-  return process.env.INFISICAL_PROJECT_ID ?? "***REMOVED***"
-}

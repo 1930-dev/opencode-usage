@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "path"
 import { $ } from "bun"
-import { cacheDir, infisicalProjectId } from "../config.ts"
+import { cacheDir } from "../config.ts"
 import type { AAModel, ModelsDevModel } from "./metrics.ts"
 
 const TTL_MS = 24 * 60 * 60 * 1000
@@ -37,13 +37,24 @@ export async function fetchModelsDev(): Promise<Record<string, ModelsDevModel>> 
   return flat
 }
 
+/**
+ * The Artificial Analysis key. `AA_API_KEY` in the environment is the portable
+ * path; the vault lookup is an opt-in convenience for machines that keep the key
+ * in Infisical, and it stays behind `INFISICAL_PROJECT_ID` so this package
+ * carries no vault address of anyone's. It goes through the `infisical-secret`
+ * wrapper, which supplies the address and the token itself — the bare binary
+ * would put a JWT in argv, where every process on the machine can read it.
+ */
 async function aaApiKey(): Promise<string | undefined> {
+  if (process.env.AA_API_KEY) return process.env.AA_API_KEY
+  const projectId = process.env.INFISICAL_PROJECT_ID
+  if (!projectId) return undefined
   try {
-    const out = await $`infisical secrets get AA_API_KEY --projectId ${infisicalProjectId()} --env prod --token ${(await $`infisical-token`.text()).trim()} --domain ***REMOVED*** --plain --silent`.text()
-    const key = out.trim()
-    return key || undefined
+    const out =
+      await $`infisical-secret get AA_API_KEY --projectId ${projectId} --env prod --plain --silent`.text()
+    return out.trim() || undefined
   } catch {
-    return process.env.AA_API_KEY
+    return undefined
   }
 }
 

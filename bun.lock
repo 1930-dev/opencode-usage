@@ -9,7 +9,11 @@
         "@opentui/core": "0.5.10",
         "@opentui/solid": "^0.5.10",
         "@types/bun": "latest",
-        "solid-js": "^1.9.15",
+      },
+      "peerDependencies": {
+        "@opencode-ai/plugin": ">=1.18",
+        "@opentui/core": ">=0.5",
+        "@opentui/solid": ">=0.5",
       },
     },
     "packages/cli": {

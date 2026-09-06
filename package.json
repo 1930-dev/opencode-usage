@@ -1,39 +1,59 @@
 {
-  "name": "opencode-usage",
+  "name": "@agurod42/opencode-usage",
   "version": "0.1.0",
-  "description": "Usage tracking, cost estimation, and model ranking CLI for opencode",
+  "description": "Usage tracking, budget percentages and model ranking for opencode — CLI plus a /usage TUI plugin",
   "type": "module",
   "bin": {
-    "opencode-usage": "./packages/cli/src/cli.ts"
+    "opencode-usage": "./dist/cli.js"
   },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun packages/plugin/build.ts",
-    "preview": "bun run build && bun packages/plugin/preview.ts"
+    "build": "bun scripts/build.ts",
+    "preview": "bun run build && bun packages/plugin/preview.ts",
+    "prepublishOnly": "bun run build && bun test && tsc --noEmit"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/agurod42/opencode-usage"
+    "url": "git+https://github.com/agurod42/opencode-usage.git"
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
     "usage",
     "cost",
+    "budget",
+    "quota",
     "tokens",
-    "ai",
     "llm"
   ],
-  "author": "Agu Rodr\u00edguez <me@agu.uy>",
+  "author": "Agu Rodríguez <me@agu.uy>",
   "license": "MIT",
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.26",
     "@opentui/core": "0.5.10",
     "@opentui/solid": "^0.5.10",
-    "@types/bun": "latest",
-    "solid-js": "^1.9.15"
+    "@types/bun": "latest"
   },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "exports": {
+    "./tui": {
+      "import": "./dist/tui.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18",
+    "@opentui/core": ">=0.5",
+    "@opentui/solid": ">=0.5"
+  }
 }
