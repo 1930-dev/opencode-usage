@@ -3,21 +3,25 @@ import type { TuiDialogStack, TuiPluginApi, TuiPlugin, TuiPluginModule } from "@
 import { getUsageSnapshot, startOfDayMs } from "@opencode-usage/core"
 
 const COMMAND = "opencode-usage.show"
-const BAR_WIDTH = 14
 
 /**
- * The dialog frame is about 60 columns wide at its "large" size, so the table
- * is built to 47 and the budget bar goes on its own line under each row. A
- * wider table wraps inside the frame, which is unreadable.
+ * The dialog frame gives about 61 columns at its "large" size. The table is
+ * built to 57 plus one column of padding on each side; content wider than the
+ * frame wraps, which is unreadable, so every column has a fixed width and every
+ * row carries wrapMode="none" to clip instead.
  */
 const COLS = [
-  { title: "PROVIDER", width: 13, align: "left" },
-  { title: "MSGS", width: 5, align: "right" },
-  { title: "TOK IN", width: 8, align: "right" },
-  { title: "TOK OUT", width: 8, align: "right" },
-  { title: "COST", width: 9, align: "right" },
+  { title: "PROVIDER", width: 12, align: "left" },
+  { title: "MSGS", width: 4, align: "right" },
+  { title: "TOK IN", width: 7, align: "right" },
+  { title: "TOK OUT", width: 7, align: "right" },
+  { title: "COST", width: 8, align: "right" },
+  { title: "BUDGET", width: 14, align: "left" },
 ] as const
+const BUDGET_COL = COLS.length - 1
 const TABLE_WIDTH = COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1)
+/** Whatever the bar and " 100%" do not use inside the budget column. */
+const BAR_WIDTH = 6
 
 type Snapshot = Awaited<ReturnType<typeof getUsageSnapshot>>
 
@@ -40,6 +44,24 @@ function line(values: string[]): string {
 function progressBar(pct: number): string {
   const filled = Math.round((Math.min(Math.max(pct, 0), 100) / 100) * BAR_WIDTH)
   return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled)
+}
+
+/**
+ * The budget column has no room for "weekly" next to the bar and the
+ * percentage, and the window differs per provider, so it is abbreviated rather
+ * than dropped.
+ */
+const WINDOW_ABBREV: Record<string, string> = {
+  daily: "d",
+  hourly: "h",
+  monthly: "mo",
+  session: "ss",
+  weekly: "wk",
+  yearly: "yr",
+}
+
+function abbrevWindow(label: string): string {
+  return WINDOW_ABBREV[label.toLowerCase()] ?? label.slice(0, 2)
 }
 
 /**
@@ -92,11 +114,15 @@ function Header(props: { palette: Palette }) {
 }
 
 function Budget(props: { pct: number; label: string; palette: Palette }) {
+  const suffix = () => {
+    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${abbrevWindow(props.label)}`
+    const room = COLS[BUDGET_COL]!.width - BAR_WIDTH
+    return tail.length > room ? tail.slice(0, room) : tail.padEnd(room)
+  }
   return (
     <box flexDirection="row">
-      <text fg={props.palette.subtle}>{"  "}</text>
-      <text fg={barColor(props.pct, props.palette)}>{progressBar(props.pct)}</text>
-      <text fg={props.palette.muted}>{` ${props.pct.toFixed(0).padStart(3)}%  ${props.label}`}</text>
+      <text fg={barColor(props.pct, props.palette)} wrapMode="none">{progressBar(props.pct)}</text>
+      <text fg={props.palette.muted} wrapMode="none">{suffix()}</text>
     </box>
   )
 }
@@ -105,6 +131,15 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   const p = palette(props.api)
   const rows = props.snapshot.rows.slice(0, 20)
   const rule = "\u2500".repeat(TABLE_WIDTH)
+  const lead = (r: Snapshot["rows"][number]) =>
+    line([
+      r.provider,
+      String(r.messages),
+      fmtTokens(r.tokensInput),
+      fmtTokens(r.tokensOutput),
+      `$${r.cost.toFixed(2)}`,
+      "",
+    ]).slice(0, TABLE_WIDTH - COLS[BUDGET_COL]!.width)
   return (
     <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
       <Header palette={p} />
@@ -113,23 +148,19 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
       {rows.map((r) => {
         const budget = props.snapshot.pct?.[r.provider]
         return (
-          <>
-            <text fg={p.text} wrapMode="none">
-              {line([
-                r.provider,
-                String(r.messages),
-                fmtTokens(r.tokensInput),
-                fmtTokens(r.tokensOutput),
-                `$${r.cost.toFixed(2)}`,
-              ])}
-            </text>
-            {budget ? <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} /> : null}
-          </>
+          <box flexDirection="row">
+            <text fg={p.text} wrapMode="none">{lead(r)}</text>
+            {budget ? (
+              <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} />
+            ) : (
+              <text fg={p.subtle} wrapMode="none">{"\u2014"}</text>
+            )}
+          </box>
         )
       })}
       <text fg={p.subtle} wrapMode="none">{rule}</text>
       <text fg={p.text} bold wrapMode="none">
-        {line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`])}
+        {line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`, ""])}
       </text>
     </box>
   )

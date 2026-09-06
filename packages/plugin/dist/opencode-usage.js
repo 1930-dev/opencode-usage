@@ -503,17 +503,19 @@ async function getUsageSnapshot(sinceMs, groupBy, includePct) {
   }
 }
 // packages/plugin/tui.tsx
-import { jsx, jsxs, Fragment } from "@opentui/solid/jsx-runtime";
+import { jsx, jsxs } from "@opentui/solid/jsx-runtime";
 var COMMAND = "opencode-usage.show";
-var BAR_WIDTH = 14;
 var COLS = [
-  { title: "PROVIDER", width: 13, align: "left" },
-  { title: "MSGS", width: 5, align: "right" },
-  { title: "TOK IN", width: 8, align: "right" },
-  { title: "TOK OUT", width: 8, align: "right" },
-  { title: "COST", width: 9, align: "right" }
+  { title: "PROVIDER", width: 12, align: "left" },
+  { title: "MSGS", width: 4, align: "right" },
+  { title: "TOK IN", width: 7, align: "right" },
+  { title: "TOK OUT", width: 7, align: "right" },
+  { title: "COST", width: 8, align: "right" },
+  { title: "BUDGET", width: 14, align: "left" }
 ];
+var BUDGET_COL = COLS.length - 1;
 var TABLE_WIDTH = COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1);
+var BAR_WIDTH = 6;
 function fmtTokens(n) {
   if (n >= 1e6)
     return `${(n / 1e6).toFixed(1)}M`;
@@ -532,6 +534,17 @@ function line(values) {
 function progressBar(pct) {
   const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * BAR_WIDTH);
   return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled);
+}
+var WINDOW_ABBREV = {
+  daily: "d",
+  hourly: "h",
+  monthly: "mo",
+  session: "ss",
+  weekly: "wk",
+  yearly: "yr"
+};
+function abbrevWindow(label) {
+  return WINDOW_ABBREV[label.toLowerCase()] ?? label.slice(0, 2);
 }
 function toHex(color, fallback) {
   if (typeof color === "string")
@@ -579,20 +592,23 @@ function Header(props) {
   });
 }
 function Budget(props) {
+  const suffix = () => {
+    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${abbrevWindow(props.label)}`;
+    const room = COLS[BUDGET_COL].width - BAR_WIDTH;
+    return tail.length > room ? tail.slice(0, room) : tail.padEnd(room);
+  };
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "row",
     children: [
       /* @__PURE__ */ jsx("text", {
-        fg: props.palette.subtle,
-        children: "  "
-      }),
-      /* @__PURE__ */ jsx("text", {
         fg: barColor(props.pct, props.palette),
+        wrapMode: "none",
         children: progressBar(props.pct)
       }),
       /* @__PURE__ */ jsx("text", {
         fg: props.palette.muted,
-        children: ` ${props.pct.toFixed(0).padStart(3)}%  ${props.label}`
+        wrapMode: "none",
+        children: suffix()
       })
     ]
   });
@@ -601,6 +617,14 @@ function Table(props) {
   const p = palette(props.api);
   const rows = props.snapshot.rows.slice(0, 20);
   const rule = "\u2500".repeat(TABLE_WIDTH);
+  const lead = (r) => line([
+    r.provider,
+    String(r.messages),
+    fmtTokens(r.tokensInput),
+    fmtTokens(r.tokensOutput),
+    `$${r.cost.toFixed(2)}`,
+    ""
+  ]).slice(0, TABLE_WIDTH - COLS[BUDGET_COL].width);
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
     flexShrink: 0,
@@ -622,24 +646,23 @@ function Table(props) {
       }),
       rows.map((r) => {
         const budget2 = props.snapshot.pct?.[r.provider];
-        return /* @__PURE__ */ jsxs(Fragment, {
+        return /* @__PURE__ */ jsxs("box", {
+          flexDirection: "row",
           children: [
             /* @__PURE__ */ jsx("text", {
               fg: p.text,
               wrapMode: "none",
-              children: line([
-                r.provider,
-                String(r.messages),
-                fmtTokens(r.tokensInput),
-                fmtTokens(r.tokensOutput),
-                `$${r.cost.toFixed(2)}`
-              ])
+              children: lead(r)
             }),
             budget2 ? /* @__PURE__ */ jsx(Budget, {
               pct: budget2.pct,
               label: budget2.label ?? budget2.source,
               palette: p
-            }) : null
+            }) : /* @__PURE__ */ jsx("text", {
+              fg: p.subtle,
+              wrapMode: "none",
+              children: "\u2014"
+            })
           ]
         });
       }),
@@ -652,7 +675,7 @@ function Table(props) {
         fg: p.text,
         bold: true,
         wrapMode: "none",
-        children: line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`])
+        children: line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`, ""])
       })
     ]
   });
