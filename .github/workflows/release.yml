@@ -16,8 +16,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
-          # Trusted publishing needs Node >= 22.14.0 and npm >= 11.5.1.
-          node-version: "22.14.0"
+          # Two floors to clear: trusted publishing needs Node >= 22.14.0 and
+          # npm >= 11.5.1, and npm 12 itself needs Node >= 22.22.2. "22" tracks
+          # the latest 22.x LTS, which satisfies both.
+          node-version: "22"
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - run: npm install -g npm@latest
