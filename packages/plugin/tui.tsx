@@ -85,7 +85,7 @@ function barColor(pct: number, p: Palette): string {
 function Header(props: { palette: Palette }) {
   return (
     <box flexDirection="row" justifyContent="space-between">
-      <text bold>{"Usage \u2014 today"}</text>
+      <text fg={props.palette.text} bold>{"Usage \u2014 today"}</text>
       <text fg={props.palette.muted}>esc</text>
     </box>
   )
@@ -104,12 +104,12 @@ function Budget(props: { pct: number; label: string; palette: Palette }) {
 export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   const p = palette(props.api)
   const rows = props.snapshot.rows.slice(0, 20)
+  const rule = "\u2500".repeat(TABLE_WIDTH)
   return (
-    <box flexDirection="column" flexShrink={0}>
+    <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
       <Header palette={p} />
-      <text />
       <text fg={p.muted} wrapMode="none">{line(COLS.map((c) => c.title))}</text>
-      <text fg={p.subtle} wrapMode="none">{"\u2500".repeat(TABLE_WIDTH)}</text>
+      <text fg={p.subtle} wrapMode="none">{rule}</text>
       {rows.map((r) => {
         const budget = props.snapshot.pct?.[r.provider]
         return (
@@ -127,9 +127,9 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
           </>
         )
       })}
-      <text />
-      <text bold>
-        {`TOTAL  ${props.snapshot.totals.messages} msgs  $${props.snapshot.totals.cost.toFixed(2)} est.`}
+      <text fg={p.subtle} wrapMode="none">{rule}</text>
+      <text fg={p.text} bold wrapMode="none">
+        {line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`])}
       </text>
     </box>
   )
@@ -138,7 +138,7 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
 export function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
   const p = palette(props.api)
   return (
-    <box flexDirection="column" flexShrink={0}>
+    <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
       <Header palette={p} />
       <text />
       <text fg={props.color ?? p.muted}>{props.text}</text>

@@ -567,6 +567,7 @@ function Header(props) {
     justifyContent: "space-between",
     children: [
       /* @__PURE__ */ jsx("text", {
+        fg: props.palette.text,
         bold: true,
         children: "Usage \u2014 today"
       }),
@@ -599,14 +600,16 @@ function Budget(props) {
 function Table(props) {
   const p = palette(props.api);
   const rows = props.snapshot.rows.slice(0, 20);
+  const rule = "\u2500".repeat(TABLE_WIDTH);
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
     flexShrink: 0,
+    paddingLeft: 1,
+    paddingRight: 1,
     children: [
       /* @__PURE__ */ jsx(Header, {
         palette: p
       }),
-      /* @__PURE__ */ jsx("text", {}),
       /* @__PURE__ */ jsx("text", {
         fg: p.muted,
         wrapMode: "none",
@@ -615,7 +618,7 @@ function Table(props) {
       /* @__PURE__ */ jsx("text", {
         fg: p.subtle,
         wrapMode: "none",
-        children: "\u2500".repeat(TABLE_WIDTH)
+        children: rule
       }),
       rows.map((r) => {
         const budget2 = props.snapshot.pct?.[r.provider];
@@ -640,10 +643,16 @@ function Table(props) {
           ]
         });
       }),
-      /* @__PURE__ */ jsx("text", {}),
       /* @__PURE__ */ jsx("text", {
+        fg: p.subtle,
+        wrapMode: "none",
+        children: rule
+      }),
+      /* @__PURE__ */ jsx("text", {
+        fg: p.text,
         bold: true,
-        children: `TOTAL  ${props.snapshot.totals.messages} msgs  $${props.snapshot.totals.cost.toFixed(2)} est.`
+        wrapMode: "none",
+        children: line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`])
       })
     ]
   });
@@ -653,6 +662,8 @@ function Message(props) {
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
     flexShrink: 0,
+    paddingLeft: 1,
+    paddingRight: 1,
     children: [
       /* @__PURE__ */ jsx(Header, {
         palette: p
