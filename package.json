@@ -1,5 +1,5 @@
 {
-  "name": "@1930.dev/opencode-usage",
+  "name": "@1930dev/opencode-usage",
   "version": "0.1.0",
   "description": "Usage tracking, budget percentages and model ranking for opencode \u2014 CLI plus a /usage TUI plugin",
   "type": "module",
@@ -48,8 +48,7 @@
     "README.md"
   ],
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.18",
