@@ -1,6 +1,7 @@
 # opencode-usage
 
-Usage tracking, cost estimation, and model ranking CLI for [opencode](https://opencode.ai).
+Usage tracking, budget percentages and model ranking for [opencode](https://opencode.ai):
+a CLI, and a `/usage` slash command for the TUI.
 
 ## Install
 
@@ -15,14 +16,22 @@ Requires [Bun](https://bun.sh): the CLI reads opencode's SQLite through `bun:sql
 ```bash
 # Local usage from opencode's SQLite (all providers, all projects)
 opencode-usage usage                    # last 7 days, grouped by provider
+
+# Window
 opencode-usage usage --today            # today only
 opencode-usage usage --since 30d        # last 30 days
-opencode-usage usage --by model         # group by model instead of provider
-opencode-usage usage --by project       # group by project directory
-opencode-usage usage --by agent         # group by agent (build/plan/etc)
-opencode-usage usage --pct              # add % BUDGET column (requires --by provider)
-#   --by provider lists every connected provider, including those idle in the window
-opencode-usage usage --json             # machine-readable output
+
+# Grouping
+opencode-usage usage --by agent         # by agent (build/plan/etc)
+opencode-usage usage --by day           # by day
+opencode-usage usage --by model         # by model
+opencode-usage usage --by project       # by project directory
+opencode-usage usage --by provider      # the default; lists every connected
+                                        # provider, idle ones included
+
+# Output
+opencode-usage usage --json             # machine-readable
+opencode-usage usage --pct              # add the % BUDGET column (--by provider only)
 
 # Connected providers + live quota
 opencode-usage providers
@@ -74,19 +83,20 @@ Restart opencode after a rebuild: the bundle is read once at start.
 Normalized percentage of budget consumed per provider, from these sources (in priority):
 
 1. **Live quota** — provider-reported usage:
-   - `opencode-go` (Zen): rolling 5h / weekly / monthly % (binding window)
    - `github-copilot`: premium requests entitlement (7000/mo)
+   - `opencode-go` (Zen): rolling 5h / weekly / monthly % (binding window)
    - `openrouter`: credits used / total credits
    - `zai`: coding plan quota
 
-2. **Documented limits** — monthly equivalent of daily limits:
-   - `groq`: 200k tokens/day → 6M/month
-   - `google`: 1500 requests/day → 45k/month
-   - `digitalocean`: 5M tokens/day → 150M/month
-   - `cerebras`: 1M tokens/day → 30M/month
-   - `google` (Gemini free): 1500 requests/day → 45k/month
-   - `groq`: 200k tokens/day → 6M/month
-   - `cerebras`: 1M tokens/day → 30M/month
+2. **Documented limits** — published quotas, used when the provider reports none:
+   - `cerebras`: 1M tokens/day (free tier)
+   - `cloudflare-workers-ai`: 100k neurons/day (free tier)
+   - `digitalocean`: 5M tokens/day (paid)
+   - `google`: 1500 requests/day (free tier)
+   - `groq`: 200k tokens/day (free tier)
+   - `nvidia`: 1000 credits/month (free tier)
+   - `orcarouter`: undocumented
+   - `snowflake-cortex`: 100 credits/month (paid)
 
 3. **budgets.json** — your monthly USD per provider:
    ```json
@@ -118,32 +128,40 @@ table and carried in `--json`.
 
 ## Requirements
 
-- [Bun](https://bun.sh) ≥ 1.0
-- [opencode](https://opencode.ai) with existing sessions (reads `~/.local/share/opencode/opencode.db`)
-- For live quota: credentials already configured in opencode (`~/.local/share/opencode/auth.json`)
+- [Bun](https://bun.sh) >= 1.0 — the CLI reads opencode's SQLite through `bun:sqlite`
+- [opencode](https://opencode.ai) with existing sessions, at
+  `~/.local/share/opencode/opencode.db`
+- For live quota: provider credentials already configured in opencode, at
+  `~/.local/share/opencode/auth.json`
 
 ## Configuration
 
-- `OPENCODE_DB_PATH` — override opencode database path
-- `OPENCODE_AUTH_PATH` — override auth.json path
-- `OPENCODE_IMP_CACHE` — cache directory (default `~/.cache/opencode-usage`)
-- `OPENCODE_IMP_BUDGETS` — budgets.json path
 - `AA_API_KEY` — Artificial Analysis key, used by `top` for the intelligence indices.
   Optional: without it `top` still prints prices, only without `IQ` and `IQ/$`.
   A free key is at [artificialanalysis.ai/data-api](https://artificialanalysis.ai/data-api)
+- `OPENCODE_AUTH_PATH` — override the path to opencode's `auth.json`
+- `OPENCODE_DB_PATH` — override the path to opencode's database
+- `OPENCODE_USAGE_BUDGETS` — override the path to `budgets.json`
+- `OPENCODE_USAGE_CACHE` — cache directory (default `~/.cache/opencode-usage`)
 
 ## Development
 
 ```bash
-bun install        # install workspace deps
-bun test           # run tests
-bunx tsc --noEmit  # typecheck
+bun install          # install workspace deps
+bun run build        # write dist/tui.js and dist/cli.js
+bun run preview      # render the /usage dialog headless, at several widths
+bun test             # run tests
+bunx tsc --noEmit    # typecheck
 ```
 
-The workspace is a Bun monorepo with three packages:
-- `@opencode-usage/core` — shared data layer (SQLite, quotas, matching)
-- `@opencode-usage/cli` — the `opencode-usage` CLI
-- `@opencode-usage/plugin` — TUI plugin for opencode itself
+The workspace is a Bun monorepo. The packages are listed by dependency order,
+since `cli` and `plugin` both build on `core`:
+
+- `@opencode-usage/core` — shared data layer (SQLite, quotas, matching, ranking)
+- `@opencode-usage/cli` — the `opencode-usage` binary
+- `@opencode-usage/plugin` — the opencode TUI plugin
+
+Only the root package is published; `core` is inlined into both bundles.
 
 ## License
 
