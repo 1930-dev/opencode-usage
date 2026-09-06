@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm provenance
+  id-token: write # OIDC token for npm trusted publishing
 
 jobs:
   publish:
@@ -16,12 +16,15 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Trusted publishing needs Node >= 22.14.0 and npm >= 11.5.1.
+          node-version: "22.14.0"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun test
       - run: bunx tsc --noEmit
       - run: bun run build
-      - run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No NODE_AUTH_TOKEN: npm authenticates over OIDC, and publishes the
+      # provenance attestation by itself.
+      - run: npm publish
