@@ -17,7 +17,13 @@ interface CopilotUser {
   quota_snapshots?: Record<string, CopilotSnapshot>
 }
 
-function premiumBudget(s: CopilotSnapshot): { percentUsed: number; label: string } | undefined {
+/**
+ * An account does not have to report a given snapshot, and the ones it reports
+ * change with the plan. A missing snapshot is a provider without that budget,
+ * not a provider that failed.
+ */
+function premiumBudget(s: CopilotSnapshot | undefined): { percentUsed: number; label: string } | undefined {
+  if (!s) return undefined
   if (s.unlimited && s.entitlement === 0) return undefined
   const remaining = s.remaining ?? s.quota_remaining
   if (remaining === undefined) return undefined
