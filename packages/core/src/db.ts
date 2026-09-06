@@ -19,7 +19,7 @@ const CREATED = "CAST(json_extract(data,'$.time.created') AS INTEGER)"
 const GROUPS: Record<GroupBy, string> = {
   provider: "json_extract(data,'$.providerID')",
   model: "json_extract(data,'$.providerID') || '/' || json_extract(data,'$.modelID')",
-  day: "strftime('%Y-%m-%d', (${" + CREATED + "})/1000, 'unixepoch')",
+  day: `strftime('%Y-%m-%d', (${CREATED})/1000, 'unixepoch')`,
   project: "json_extract(data,'$.path.cwd')",
   agent: "json_extract(data,'$.agent')",
 }
