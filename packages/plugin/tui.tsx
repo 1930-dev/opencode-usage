@@ -78,6 +78,7 @@ function toHex(color: unknown, fallback: string): string {
 }
 
 interface Palette {
+  accent: string
   text: string
   muted: string
   subtle: string
@@ -89,6 +90,7 @@ interface Palette {
 function palette(api: TuiPluginApi): Palette {
   const t = api.theme?.current as Record<string, unknown> | undefined
   return {
+    accent: toHex(t?.primary, "#a277ff"),
     text: toHex(t?.text, "#e5e5e5"),
     muted: toHex(t?.textMuted, "#8a8a8a"),
     subtle: toHex(t?.borderSubtle, "#4a4a4a"),
@@ -113,6 +115,16 @@ function Header(props: { palette: Palette }) {
   )
 }
 
+function Frame(props: { palette: Palette; children: any }) {
+  return (
+    <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
+      <Header palette={props.palette} />
+      <text />
+      {props.children}
+    </box>
+  )
+}
+
 function Budget(props: { pct: number; label: string; palette: Palette }) {
   const suffix = () => {
     const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${abbrevWindow(props.label)}`
@@ -130,7 +142,6 @@ function Budget(props: { pct: number; label: string; palette: Palette }) {
 export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   const p = palette(props.api)
   const rows = props.snapshot.rows.slice(0, 20)
-  const rule = "\u2500".repeat(TABLE_WIDTH)
   const lead = (r: Snapshot["rows"][number]) =>
     line([
       r.provider,
@@ -141,39 +152,31 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
       "",
     ]).slice(0, TABLE_WIDTH - COLS[BUDGET_COL]!.width)
   return (
-    <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
-      <Header palette={p} />
-      <text fg={p.muted} wrapMode="none">{line(COLS.map((c) => c.title))}</text>
-      <text fg={p.subtle} wrapMode="none">{rule}</text>
+    <Frame palette={p}>
+      <text fg={p.accent} wrapMode="none">{line(COLS.map((c) => c.title))}</text>
       {rows.map((r) => {
         const budget = props.snapshot.pct?.[r.provider]
         return (
           <box flexDirection="row">
             <text fg={p.text} wrapMode="none">{lead(r)}</text>
-            {budget ? (
-              <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} />
-            ) : (
-              <text fg={p.subtle} wrapMode="none">{"\u2014"}</text>
-            )}
+            {budget ? <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} /> : null}
           </box>
         )
       })}
-      <text fg={p.subtle} wrapMode="none">{rule}</text>
+      <text />
       <text fg={p.text} bold wrapMode="none">
         {line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`, ""])}
       </text>
-    </box>
+    </Frame>
   )
 }
 
 export function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
   const p = palette(props.api)
   return (
-    <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
-      <Header palette={p} />
-      <text />
-      <text fg={props.color ?? p.muted}>{props.text}</text>
-    </box>
+    <Frame palette={p}>
+      <text fg={props.color ?? p.muted} wrapMode="none">{props.text}</text>
+    </Frame>
   )
 }
 

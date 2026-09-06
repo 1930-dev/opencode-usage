@@ -559,6 +559,7 @@ function toHex(color, fallback) {
 function palette(api) {
   const t = api.theme?.current;
   return {
+    accent: toHex(t?.primary, "#a277ff"),
     text: toHex(t?.text, "#e5e5e5"),
     muted: toHex(t?.textMuted, "#8a8a8a"),
     subtle: toHex(t?.borderSubtle, "#4a4a4a"),
@@ -591,6 +592,23 @@ function Header(props) {
     ]
   });
 }
+function Frame(props) {
+  return /* @__PURE__ */ jsxs("box", {
+    flexDirection: "column",
+    flexShrink: 0,
+    paddingLeft: 1,
+    paddingRight: 1,
+    paddingTop: 1,
+    paddingBottom: 1,
+    children: [
+      /* @__PURE__ */ jsx(Header, {
+        palette: props.palette
+      }),
+      /* @__PURE__ */ jsx("text", {}),
+      props.children
+    ]
+  });
+}
 function Budget(props) {
   const suffix = () => {
     const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${abbrevWindow(props.label)}`;
@@ -616,7 +634,6 @@ function Budget(props) {
 function Table(props) {
   const p = palette(props.api);
   const rows = props.snapshot.rows.slice(0, 20);
-  const rule = "\u2500".repeat(TABLE_WIDTH);
   const lead = (r) => line([
     r.provider,
     String(r.messages),
@@ -625,24 +642,13 @@ function Table(props) {
     `$${r.cost.toFixed(2)}`,
     ""
   ]).slice(0, TABLE_WIDTH - COLS[BUDGET_COL].width);
-  return /* @__PURE__ */ jsxs("box", {
-    flexDirection: "column",
-    flexShrink: 0,
-    paddingLeft: 1,
-    paddingRight: 1,
+  return /* @__PURE__ */ jsxs(Frame, {
+    palette: p,
     children: [
-      /* @__PURE__ */ jsx(Header, {
-        palette: p
-      }),
       /* @__PURE__ */ jsx("text", {
-        fg: p.muted,
+        fg: p.accent,
         wrapMode: "none",
         children: line(COLS.map((c) => c.title))
-      }),
-      /* @__PURE__ */ jsx("text", {
-        fg: p.subtle,
-        wrapMode: "none",
-        children: rule
       }),
       rows.map((r) => {
         const budget2 = props.snapshot.pct?.[r.provider];
@@ -658,19 +664,11 @@ function Table(props) {
               pct: budget2.pct,
               label: budget2.label ?? budget2.source,
               palette: p
-            }) : /* @__PURE__ */ jsx("text", {
-              fg: p.subtle,
-              wrapMode: "none",
-              children: "\u2014"
-            })
+            }) : null
           ]
         });
       }),
-      /* @__PURE__ */ jsx("text", {
-        fg: p.subtle,
-        wrapMode: "none",
-        children: rule
-      }),
+      /* @__PURE__ */ jsx("text", {}),
       /* @__PURE__ */ jsx("text", {
         fg: p.text,
         bold: true,
@@ -682,21 +680,13 @@ function Table(props) {
 }
 function Message(props) {
   const p = palette(props.api);
-  return /* @__PURE__ */ jsxs("box", {
-    flexDirection: "column",
-    flexShrink: 0,
-    paddingLeft: 1,
-    paddingRight: 1,
-    children: [
-      /* @__PURE__ */ jsx(Header, {
-        palette: p
-      }),
-      /* @__PURE__ */ jsx("text", {}),
-      /* @__PURE__ */ jsx("text", {
-        fg: props.color ?? p.muted,
-        children: props.text
-      })
-    ]
+  return /* @__PURE__ */ jsx(Frame, {
+    palette: p,
+    children: /* @__PURE__ */ jsx("text", {
+      fg: props.color ?? p.muted,
+      wrapMode: "none",
+      children: props.text
+    })
   });
 }
 function fitSize(api, dialog) {
