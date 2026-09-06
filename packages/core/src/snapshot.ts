@@ -1,15 +1,16 @@
-import { openDb, usageSince, usageTotals, monthlyUsageByProvider } from "./db.ts"
+import { openDb, usageSince, usageTotals, localUsageByProvider, type ProviderLocal } from "./db.ts"
 import { providerStatuses } from "./providers.ts"
-import { readBudgets, resolvePct } from "./budget.ts"
+import { readBudgets, resolvePct, type PctResult, type PeriodUsage } from "./budget.ts"
 import { readAuth } from "./auth.ts"
 import { limitsAsMap } from "./limits.ts"
-import { startOfMonthMs } from "./types.ts"
-import type { UsageRow, UsageTotals } from "./types.ts"
+import { startOfDayMs, startOfMonthMs } from "./types.ts"
+import type { GroupBy, UsageRow, UsageTotals } from "./types.ts"
+import type { ProviderQuota } from "./quota/shared.ts"
 
 export interface UsageSnapshot {
   rows: UsageRow[]
   totals: UsageTotals
-  pct?: Record<string, { pct: number; source: string; label?: string }>
+  pct?: Record<string, PctResult>
 }
 
 /**
@@ -52,29 +53,48 @@ async function withConnectedProviders(rows: UsageRow[]): Promise<UsageRow[]> {
   )
 }
 
-export async function getUsageSnapshot(sinceMs: number, groupBy: "provider" | "model" | "day" | "project" | "agent", includePct: boolean): Promise<UsageSnapshot> {
+function periodUsage(usage: Map<string, ProviderLocal>, provider: string): PeriodUsage {
+  const local = usage.get(provider)
+  return { tokens: local?.tokens ?? 0, requests: local?.messages ?? 0 }
+}
+
+/**
+ * A percentage per provider. The window the operator asked for sizes the table,
+ * but never the budget: a limit is read against the period it resets on, and a
+ * budget in USD against the calendar month it is written for.
+ */
+async function resolvePctByProvider(rows: UsageRow[], day: Map<string, ProviderLocal>, month: Map<string, ProviderLocal>): Promise<Record<string, PctResult>> {
+  const budgets = await readBudgets()
+  const live = new Map<string, ProviderQuota>()
+  for (const status of await providerStatuses({ noNet: false })) {
+    if (status.quota) live.set(status.provider, status.quota)
+  }
+  const limits = limitsAsMap()
+
+  const pct: Record<string, PctResult> = {}
+  for (const row of rows) {
+    const resolved = resolvePct(row.provider, {
+      live,
+      budgets,
+      monthCost: month.get(row.provider)?.cost ?? 0,
+      usage: { day: periodUsage(day, row.provider), month: periodUsage(month, row.provider) },
+      limits,
+    })
+    if (resolved.pct > 0 || resolved.source !== "none") pct[row.provider] = resolved
+  }
+  return pct
+}
+
+export async function getUsageSnapshot(sinceMs: number, groupBy: GroupBy, includePct: boolean): Promise<UsageSnapshot> {
   const db = openDb()
   try {
-    const rows = groupBy === "provider" ? await withConnectedProviders(usageSince(db, sinceMs, groupBy)) : usageSince(db, sinceMs, groupBy)
+    const grouped = usageSince(db, sinceMs, groupBy)
+    const rows = groupBy === "provider" ? await withConnectedProviders(grouped) : grouped
     const totals = usageTotals(db, sinceMs)
-    let pct: Map<string, { pct: number; source: string; label?: string }> | undefined
-    if (includePct) {
-      const budgets = await readBudgets()
-      const live = await providerStatuses({ noNet: false })
-      const liveMap = new Map<string, any>()
-      for (const s of live) {
-        if (s.quota) liveMap.set(s.provider, s.quota)
-      }
-      const monthCosts = monthlyUsageByProvider(db, startOfMonthMs())
-      const limits = limitsAsMap()
-      const pctMap = new Map<string, { pct: number; source: string; label?: string }>()
-      for (const r of rows) {
-        const p = resolvePct(r.provider, liveMap, budgets, monthCosts.get(r.provider) ?? 0, r.tokensInput + r.tokensOutput, r.messages, limits)
-        if (p.pct > 0 || p.source !== "none") pctMap.set(r.provider, p)
-      }
-      pct = pctMap
-    }
-    return { rows, totals, pct: pct ? Object.fromEntries(pct) : undefined }
+    if (!includePct) return { rows, totals }
+    const day = localUsageByProvider(db, startOfDayMs())
+    const month = localUsageByProvider(db, startOfMonthMs())
+    return { rows, totals, pct: await resolvePctByProvider(rows, day, month) }
   } finally {
     db.close()
   }

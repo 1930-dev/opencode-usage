@@ -1,10 +1,20 @@
 import { describe, it, expect, afterEach } from "bun:test"
-import { readBudgets, resolvePct } from "../packages/core/src/budget.ts"
-import { getLimit, limitsAsMap, PROVIDER_LIMITS, type ProviderLimit } from "../packages/core/src/limits.ts"
+import { readBudgets, resolvePct, type PctSources } from "../packages/core/src/budget.ts"
+import { getLimit, isMeasurable, limitLabel, limitsAsMap, PROVIDER_LIMITS, type ProviderLimit } from "../packages/core/src/limits.ts"
 import type { ProviderQuota } from "../packages/core/src/quota/shared.ts"
 import { makeSandbox, type Sandbox } from "./support/fixtures.ts"
 
-const NO_LIMITS = new Map<string, ProviderLimit>()
+/** The sources with nothing in them; each test fills in only what it is about. */
+function sources(over: Partial<PctSources> = {}): PctSources {
+  return {
+    live: new Map(),
+    budgets: {},
+    monthCost: 0,
+    usage: { day: { tokens: 0, requests: 0 }, month: { tokens: 0, requests: 0 } },
+    limits: limitsAsMap(),
+    ...over,
+  }
+}
 
 function liveQuota(provider: string, percentUsed: number, label: string, ok = true): Map<string, ProviderQuota> {
   return new Map([[provider, { provider, ok, windows: [], budget: { percentUsed, label } }]])
@@ -14,14 +24,16 @@ describe("limits", () => {
   it("has one entry per provider, each citing a source", () => {
     const providers = PROVIDER_LIMITS.map((l) => l.provider)
     expect(new Set(providers).size).toBe(providers.length)
-    for (const limit of PROVIDER_LIMITS) {
-      expect(limit.source.length).toBeGreaterThan(0)
-      expect(limit.unit.length).toBeGreaterThan(0)
-    }
+    for (const limit of PROVIDER_LIMITS) expect(limit.source.length).toBeGreaterThan(0)
+  })
+
+  it("lists the providers alphabetically", () => {
+    const providers = PROVIDER_LIMITS.map((l) => l.provider)
+    expect(providers).toEqual([...providers].sort())
   })
 
   it("finds a provider by name, and nothing for one it does not document", () => {
-    expect(getLimit("groq")).toMatchObject({ metric: "tokens/day", limit: 200_000 })
+    expect(getLimit("groq")).toMatchObject({ unit: "tokens", period: "day", limit: 200_000 })
     expect(getLimit("anthropic")).toBeUndefined()
   })
 
@@ -29,6 +41,27 @@ describe("limits", () => {
     const map = limitsAsMap()
     expect(map.size).toBe(PROVIDER_LIMITS.length)
     expect(map.get("cerebras")!.limit).toBe(1_000_000)
+  })
+
+  it("measures a limit counted in tokens or requests", () => {
+    expect(isMeasurable(getLimit("groq")!)).toBe(true)
+    expect(isMeasurable(getLimit("google")!)).toBe(true)
+  })
+
+  it("does not measure a limit counted in the provider's own unit", () => {
+    expect(isMeasurable(getLimit("cloudflare-workers-ai")!)).toBe(false)
+    expect(isMeasurable(getLimit("nvidia")!)).toBe(false)
+    expect(isMeasurable(getLimit("snowflake-cortex")!)).toBe(false)
+  })
+
+  it("does not measure a limit nobody published", () => {
+    expect(isMeasurable(getLimit("orcarouter")!)).toBe(false)
+  })
+
+  it("writes a limit the way the provider does", () => {
+    expect(limitLabel(getLimit("groq")!)).toBe("200,000 tokens/day")
+    expect(limitLabel(getLimit("google")!)).toBe("1,500 requests/day")
+    expect(limitLabel(getLimit("nvidia")!)).toBe("1,000 credits/month")
   })
 })
 
@@ -60,58 +93,64 @@ describe("readBudgets", () => {
 
 describe("resolvePct", () => {
   it("prefers live quota over every other source", () => {
-    const r = resolvePct("opencode-go", liveQuota("opencode-go", 62, "5h"), { "opencode-go": 10 }, 5, 0, 0, limitsAsMap())
+    const r = resolvePct("opencode-go", sources({ live: liveQuota("opencode-go", 62, "5h"), budgets: { "opencode-go": 10 }, monthCost: 5 }))
     expect(r).toEqual({ pct: 62, source: "live", label: "5h" })
   })
 
   it("ignores live quota the provider could not answer for", () => {
-    const r = resolvePct("groq", liveQuota("groq", 62, "5h", false), { groq: 4 }, 1, 0, 0, NO_LIMITS)
-    expect(r.source).toBe("budgets")
-    expect(r.pct).toBe(25)
+    const r = resolvePct("groq", sources({ live: liveQuota("groq", 62, "5h", false), budgets: { groq: 4 }, monthCost: 1 }))
+    expect(r).toEqual({ pct: 25, source: "budgets" })
   })
 
   it("falls back to the monthly budget in budgets.json", () => {
-    expect(resolvePct("digitalocean", new Map(), { digitalocean: 5 }, 2.5, 0, 0, NO_LIMITS)).toEqual({ pct: 50, source: "budgets" })
+    expect(resolvePct("digitalocean", sources({ budgets: { digitalocean: 5 }, monthCost: 2.5 }))).toEqual({ pct: 50, source: "budgets" })
   })
 
   it("reports zero rather than infinity for a budget of zero", () => {
-    expect(resolvePct("groq", new Map(), { groq: 0 }, 9, 0, 0, NO_LIMITS)).toEqual({ pct: 0, source: "budgets" })
+    expect(resolvePct("groq", sources({ budgets: { groq: 0 }, monthCost: 9 }))).toEqual({ pct: 0, source: "budgets" })
   })
 
-  it("spreads a documented daily token limit over the month", () => {
-    const r = resolvePct("groq", new Map(), {}, 0, 600_000, 0, limitsAsMap())
-    expect(r.source).toBe("limits")
-    expect(r.label).toBe("200,000 tokens/day")
-    expect(r.pct).toBeCloseTo(10)
+  it("reads a daily token limit against today, not against the table's window", () => {
+    const r = resolvePct(
+      "groq",
+      sources({ usage: { day: { tokens: 20_000, requests: 3 }, month: { tokens: 4_000_000, requests: 900 } } }),
+    )
+    expect(r).toEqual({ pct: 10, source: "limits", label: "200,000 tokens/day" })
   })
 
-  it("uses request count for a provider metered in requests", () => {
-    const r = resolvePct("google", new Map(), {}, 0, 999, 4_500, limitsAsMap())
-    expect(r.source).toBe("limits")
-    expect(r.label).toBe("1,500 requests/day")
-    expect(r.pct).toBeCloseTo(10)
+  it("reads a daily request limit against today's requests", () => {
+    const r = resolvePct(
+      "google",
+      sources({ usage: { day: { tokens: 9_000_000, requests: 150 }, month: { tokens: 0, requests: 40_000 } } }),
+    )
+    expect(r).toEqual({ pct: 10, source: "limits", label: "1,500 requests/day" })
   })
 
-  it("reports nothing for a limit measured in credits", () => {
-    expect(resolvePct("nvidia", new Map(), {}, 0, 5_000, 10, limitsAsMap()).source).toBe("none")
+  it("reads a monthly limit against the month", () => {
+    const limits = new Map<string, ProviderLimit>([
+      ["monthly", { provider: "monthly", unit: "tokens", period: "month", limit: 1_000_000, tier: "paid", source: "test" }],
+    ])
+    const r = resolvePct("monthly", sources({ limits, usage: { day: { tokens: 1_000, requests: 1 }, month: { tokens: 250_000, requests: 30 } } }))
+    expect(r).toMatchObject({ pct: 25, source: "limits", label: "1,000,000 tokens/month" })
   })
 
-  it("reports nothing for a limit measured in neurons", () => {
-    expect(resolvePct("cloudflare-workers-ai", new Map(), {}, 0, 5_000, 10, limitsAsMap()).source).toBe("none")
+  it("reports a provider that is over its documented limit", () => {
+    const r = resolvePct("groq", sources({ usage: { day: { tokens: 300_000, requests: 0 }, month: { tokens: 0, requests: 0 } } }))
+    expect(r.pct).toBeCloseTo(150)
+  })
+
+  it("reports nothing for a limit counted in credits or neurons", () => {
+    const heavy = { day: { tokens: 5_000_000, requests: 900 }, month: { tokens: 90_000_000, requests: 30_000 } }
+    expect(resolvePct("nvidia", sources({ usage: heavy })).source).toBe("none")
+    expect(resolvePct("cloudflare-workers-ai", sources({ usage: heavy })).source).toBe("none")
+    expect(resolvePct("snowflake-cortex", sources({ usage: heavy })).source).toBe("none")
   })
 
   it("reports nothing for a provider whose limit is undocumented", () => {
-    expect(resolvePct("orcarouter", new Map(), {}, 0, 5_000, 10, limitsAsMap()).source).toBe("none")
-  })
-
-  it("reports nothing for a metric it does not know how to count", () => {
-    const limits = new Map<string, ProviderLimit>([
-      ["odd", { provider: "odd", metric: "tokens/minute", limit: 30_000, unit: "tokens", tier: "free", source: "test" }],
-    ])
-    expect(resolvePct("odd", new Map(), {}, 0, 5_000, 10, limits).source).toBe("none")
+    expect(resolvePct("orcarouter", sources({ usage: { day: { tokens: 5_000, requests: 10 }, month: { tokens: 0, requests: 0 } } })).source).toBe("none")
   })
 
   it("reports nothing when the provider has no source at all", () => {
-    expect(resolvePct("unknown", new Map(), {}, 0, 0, 0, limitsAsMap())).toEqual({ pct: 0, source: "none" })
+    expect(resolvePct("unknown", sources())).toEqual({ pct: 0, source: "none" })
   })
 })

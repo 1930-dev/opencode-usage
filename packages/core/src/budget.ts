@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { budgetsPath } from "./config.ts"
 import type { ProviderQuota } from "./quota/shared.ts"
-import { limitsAsMap, type ProviderLimit } from "./limits.ts"
+import { isMeasurable, limitLabel, type LimitPeriod, type ProviderLimit } from "./limits.ts"
 
 export interface Budgets {
   [provider: string]: number
@@ -21,51 +21,57 @@ export interface PctResult {
   label?: string
 }
 
-function pctFromLimit(limit: ProviderLimit, usageTokens: number, usageRequests: number): number | undefined {
-  if (limit.limit <= 0) return undefined
-  const effectiveLimit = limit.metric.endsWith("/day") && limit.metric !== "neurons/day"
-    ? limit.limit * 30
-    : limit.limit
-  const metric = limit.metric.replace("/day", "").replace("/month", "")
-  switch (metric) {
-    case "tokens":
-      if (effectiveLimit > 0) return (usageTokens / effectiveLimit) * 100
-      return undefined
-    case "requests":
-      if (effectiveLimit > 0) return (usageRequests / effectiveLimit) * 100
-      return undefined
-    case "credits":
-    case "neurons":
-      return undefined
-    default:
-      return undefined
-  }
+/** What one provider used inside one period. */
+export interface PeriodUsage {
+  tokens: number
+  requests: number
 }
 
-export function resolvePct(
-  provider: string,
-  live: Map<string, ProviderQuota>,
-  budgets: Record<string, number>,
-  monthCost: number,
-  usageTokens: number,
-  usageRequests: number,
-  limits: Map<string, ProviderLimit>,
-): PctResult {
-  const liveQ = live.get(provider)
-  if (liveQ?.budget && liveQ.ok) {
-    return { pct: liveQ.budget.percentUsed, source: "live", label: liveQ.budget.label }
+export interface PctSources {
+  /** Quota the provider reported for itself. */
+  live: Map<string, ProviderQuota>
+  /** Monthly budget in USD, per provider, from budgets.json. */
+  budgets: Record<string, number>
+  /** What the provider cost so far this calendar month. */
+  monthCost: number
+  /**
+   * Usage in each period a documented limit resets on. A daily limit is read
+   * against today and a monthly one against this month, so the percentage
+   * answers the question the limit asks.
+   */
+  usage: Record<LimitPeriod, PeriodUsage>
+  limits: Map<string, ProviderLimit>
+}
+
+function pctFromLimit(limit: ProviderLimit, usage: Record<LimitPeriod, PeriodUsage>): number | undefined {
+  if (!isMeasurable(limit)) return undefined
+  const period = usage[limit.period]
+  const used = limit.unit === "requests" ? period.requests : period.tokens
+  return (used / limit.limit) * 100
+}
+
+/**
+ * One percentage per provider, from the best source that has an answer: the
+ * provider's own numbers, then the operator's budget in USD, then a published
+ * limit. A provider that none of the three can answer for reports `none`.
+ */
+export function resolvePct(provider: string, sources: PctSources): PctResult {
+  const live = sources.live.get(provider)
+  if (live?.budget && live.ok) {
+    return { pct: live.budget.percentUsed, source: "live", label: live.budget.label }
   }
-  if (budgets[provider] !== undefined) {
-    const budget = budgets[provider]
+
+  const budget = sources.budgets[provider]
+  if (budget !== undefined) {
     if (budget <= 0) return { pct: 0, source: "budgets" }
-    return { pct: (monthCost / budget) * 100, source: "budgets" }
+    return { pct: (sources.monthCost / budget) * 100, source: "budgets" }
   }
-  const limit = limits.get(provider)
+
+  const limit = sources.limits.get(provider)
   if (limit) {
-    const pct = pctFromLimit(limit, usageTokens, usageRequests)
-    if (pct !== undefined) {
-      return { pct, source: "limits", label: `${limit.limit.toLocaleString()} ${limit.unit}/${limit.metric.split("/")[1]}` }
-    }
+    const pct = pctFromLimit(limit, sources.usage)
+    if (pct !== undefined) return { pct, source: "limits", label: limitLabel(limit) }
   }
+
   return { pct: 0, source: "none" }
 }

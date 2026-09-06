@@ -115,21 +115,3 @@ export function localUsageByProvider(db: Database, sinceMs: number): Map<string,
   }
   return map
 }
-
-export function monthlyUsageByProvider(db: Database, startOfMonthMs: number): Map<string, number> {
-  const rows = db
-    .query<Record<string, unknown>, [number]>(
-      `SELECT COALESCE(json_extract(data,'$.providerID'),'?') AS provider,
-              COALESCE(SUM(CAST(json_extract(data,'$.cost') AS REAL)),0) AS cost
-       FROM message
-       WHERE json_extract(data,'$.role')='assistant'
-         AND CAST(json_extract(data,'$.time.created') AS INTEGER) >= ?
-       GROUP BY provider`,
-    )
-    .all(startOfMonthMs)
-  const map = new Map<string, number>()
-  for (const r of rows) {
-    map.set(String(r.provider), Number(r.cost))
-  }
-  return map
-}

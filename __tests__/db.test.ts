@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test"
-import {
-  localUsageByProvider,
-  monthlyUsageByProvider,
-  openDb,
-  usageSince,
-  usageTotals,
-} from "../packages/core/src/db.ts"
+import { localUsageByProvider, openDb, usageSince, usageTotals } from "../packages/core/src/db.ts"
 import { makeSandbox, type MessageSeed, type Sandbox } from "./support/fixtures.ts"
 import type { Database } from "bun:sqlite"
 
@@ -109,11 +103,11 @@ describe("db", () => {
     expect(openrouter.lastUsedMs).toBe(NOW - DAY)
   })
 
-  it("sums the month's cost per provider", () => {
-    const month = monthlyUsageByProvider(db, NOW - 7 * DAY)
-    expect(month.get("openrouter")).toBeCloseTo(2)
-    expect(month.get("groq")).toBeCloseTo(0.25)
-    expect(month.has("cerebras")).toBe(false)
+  it("sums the cost per provider, for a budget in USD", () => {
+    const local = localUsageByProvider(db, NOW - 7 * DAY)
+    expect(local.get("openrouter")!.cost).toBeCloseTo(2)
+    expect(local.get("groq")!.cost).toBeCloseTo(0.25)
+    expect(local.has("cerebras")).toBe(false)
   })
 
   it("labels a message with no provider rather than dropping it", () => {

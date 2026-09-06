@@ -124,17 +124,26 @@ Normalized percentage of budget consumed per provider, from these sources (in pr
    - `openrouter`: credits used / total credits
    - `zai`: coding plan quota
 
-2. **Documented limits** — published quotas, used when the provider reports none:
+2. **Documented limits** — published quotas, used when the provider reports none.
+   Each one is read against the period it resets on: a daily limit against today,
+   a monthly one against the calendar month. The window you asked for (`--since`)
+   sizes the table and never the budget.
    - `cerebras`: 1M tokens/day (free tier)
-   - `cloudflare-workers-ai`: 100k neurons/day (free tier)
    - `digitalocean`: 5M tokens/day (paid)
    - `google`: 1500 requests/day (free tier)
    - `groq`: 200k tokens/day (free tier)
+
+   These are documented but not measurable, and show `—`. opencode's database
+   records tokens and requests; a credit and a neuron are the provider's own
+   unit, derived from the model and the request by a rule it does not record.
+   Give them a line in `budgets.json` to get a percentage in USD instead.
+   - `cloudflare-workers-ai`: 100k neurons/day (free tier)
    - `nvidia`: 1000 credits/month (free tier)
    - `orcarouter`: undocumented
    - `snowflake-cortex`: 100 credits/month (paid)
 
-3. **budgets.json** — your monthly USD per provider:
+3. **budgets.json** — your monthly USD per provider, read against what the
+   provider cost so far this calendar month:
    ```json
    {
      "digitalocean": 5,
