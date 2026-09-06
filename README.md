@@ -7,7 +7,8 @@ Every connected provider in one table, with each one's remaining budget as a
 comparable percentage — whether the provider bills in tokens, requests, credits or
 neurons.
 
-<!-- Absolute URL so the image also renders on npm, which resolves nothing relative. -->
+<!-- Absolute URL so the image also renders on npm, which resolves nothing relative.
+     It also means updating the file on main updates both, with no republish. -->
 ![The /usage dialog](https://raw.githubusercontent.com/1930-dev/opencode-usage/main/docs/demo.gif)
 
 [![npm](https://img.shields.io/npm/v/@1930dev/opencode-usage)](https://www.npmjs.com/package/@1930dev/opencode-usage)
