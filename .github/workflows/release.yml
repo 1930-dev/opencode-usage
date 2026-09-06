@@ -24,7 +24,7 @@ jobs:
           package-manager-cache: false
       - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
-      - run: bun test
+      - run: bun test --coverage
       - run: bunx tsc --noEmit
       - run: bun run build
       # No NODE_AUTH_TOKEN: npm authenticates over OIDC, and publishes the

@@ -1,11 +1,24 @@
 # Build
 
-tui.jsx is built by `bun build` into a single file for opencode to load.
+`bun run build` writes the two published entry points into `dist/`:
 
-```bash
-cd packages/plugin
-bun build tui.tsx --outdir dist
-cp dist/tui.js ~/.config/opencode/plugins/opencode-usage.js
+- `dist/tui.js` — the opencode TUI plugin, named by `exports["./tui"]`
+- `dist/cli.js` — the `opencode-usage` binary, named by `bin`
+
+Both inline `@opencode-usage/core`. `@opencode-ai/*` and `@opentui/*` stay
+external: the host maps those specifiers to its own instances, and a bundled
+second copy has its calls dropped in silence.
+
+To run the plugin from a clone, point `~/.config/opencode/tui.json` at the
+bundle:
+
+```json
+{ "plugin": ["/absolute/path/to/opencode-usage/dist/tui.js"] }
 ```
 
-The plugin exposes a `/usage` slash command in opencode's TUI.
+Use `tui.json`. `opencode.json` and `~/.config/opencode/plugins/` are both
+loaded as *server* plugins, and opencode rejects a TUI-only module there.
+Restart opencode after a rebuild: the bundle is read once at start.
+
+`bun run preview` renders the dialog headless at several terminal widths, so a
+layout change can be seen with no restart.

@@ -187,8 +187,13 @@ bun install          # install workspace deps
 bun run build        # write dist/tui.js and dist/cli.js
 bun run preview      # render the /usage dialog headless, at several widths
 bun test             # run tests
+bun run coverage     # run tests with the coverage gate
 bunx tsc --noEmit    # typecheck
 ```
+
+Every line of every source file is covered, and `bunfig.toml` fails the run if
+that stops being true. `packages/cli/src/cli.ts` holds no logic for that reason:
+the commands live in `main.ts`, which a test drives directly.
 
 The workspace is a Bun monorepo. The packages are listed by dependency order,
 since `cli` and `plugin` both build on `core`:
