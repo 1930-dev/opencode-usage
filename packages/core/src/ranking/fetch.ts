@@ -1,6 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "path"
-import { $ } from "bun"
 import { cacheDir } from "../config.ts"
 import type { AAModel, ModelsDevModel } from "./metrics.ts"
 
@@ -38,30 +37,20 @@ export async function fetchModelsDev(): Promise<Record<string, ModelsDevModel>> 
 }
 
 /**
- * The Artificial Analysis key. `AA_API_KEY` in the environment is the portable
- * path; the vault lookup is an opt-in convenience for machines that keep the key
- * in Infisical, and it stays behind `INFISICAL_PROJECT_ID` so this package
- * carries no vault address of anyone's. It goes through the `infisical-secret`
- * wrapper, which supplies the address and the token itself — the bare binary
- * would put a JWT in argv, where every process on the machine can read it.
+ * The Artificial Analysis key, from the environment. Ranking is optional: with
+ * no key `top` still prints prices from models.dev, only without the indices.
+ * A free key is at https://artificialanalysis.ai/data-api — its terms are
+ * "internal use only; no redistribution", which is why this package ships no
+ * key and no snapshot of the data.
  */
-async function aaApiKey(): Promise<string | undefined> {
-  if (process.env.AA_API_KEY) return process.env.AA_API_KEY
-  const projectId = process.env.INFISICAL_PROJECT_ID
-  if (!projectId) return undefined
-  try {
-    const out =
-      await $`infisical-secret get AA_API_KEY --projectId ${projectId} --env prod --plain --silent`.text()
-    return out.trim() || undefined
-  } catch {
-    return undefined
-  }
+function aaApiKey(): string | undefined {
+  return process.env.AA_API_KEY || undefined
 }
 
 export async function fetchAA(): Promise<AAModel[]> {
   const cached = await readCache<AAModel[]>("aa.json")
   if (cached) return cached
-  const key = await aaApiKey()
+  const key = aaApiKey()
   if (!key) return []
   const res = await fetch("https://artificialanalysis.ai/api/v2/data/llms/models", {
     headers: { "x-api-key": key },

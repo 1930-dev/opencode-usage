@@ -1,3 +1,10 @@
+/**
+ * Artificial Analysis requires attribution on every tier, so the credit ships
+ * with the data rather than living only in the README.
+ */
+export const RANKING_ATTRIBUTION =
+  "Intelligence: Artificial Analysis (artificialanalysis.ai) · Pricing: models.dev"
+
 import { fetchAA, fetchModelsDev } from "./ranking/fetch.ts"
 import { buildMatcher } from "./ranking/matcher.ts"
 import { blendedPrice, valueScore, getIntelligenceIndex, type AAModel, type ModelsDevModel } from "./ranking/metrics.ts"

@@ -108,7 +108,13 @@ glm-5.3-flash            GLM 5.3-Flash       58     72       $0.11     534.9
 ...
 ```
 
-Data from [Artificial Analysis](https://artificialanalysis.ai) (Intelligence Index v4.1) + [models.dev](https://models.dev) pricing.
+Intelligence indices from [Artificial Analysis](https://artificialanalysis.ai), pricing
+from [models.dev](https://models.dev).
+
+`top` needs an `AA_API_KEY` for the indices. This package ships neither a key nor a copy
+of the data: the free Data API tier is "internal use only; no redistribution", and
+attribution is required on every tier — which is why the credit is printed under the
+table and carried in `--json`.
 
 ## Requirements
 
@@ -122,9 +128,9 @@ Data from [Artificial Analysis](https://artificialanalysis.ai) (Intelligence Ind
 - `OPENCODE_AUTH_PATH` — override auth.json path
 - `OPENCODE_IMP_CACHE` — cache directory (default `~/.cache/opencode-usage`)
 - `OPENCODE_IMP_BUDGETS` — budgets.json path
-- `AA_API_KEY` — Artificial Analysis API key, used by `top`. Without it, ranking is skipped
-- `INFISICAL_PROJECT_ID` — optional: read `AA_API_KEY` from Infisical through the
-  `infisical-secret` wrapper instead of from the environment
+- `AA_API_KEY` — Artificial Analysis key, used by `top` for the intelligence indices.
+  Optional: without it `top` still prints prices, only without `IQ` and `IQ/$`.
+  A free key is at [artificialanalysis.ai/data-api](https://artificialanalysis.ai/data-api)
 
 ## Development
 

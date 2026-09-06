@@ -3,7 +3,7 @@ import { parseDuration, startOfDayMs, startOfMonthMs, type GroupBy } from "@open
 import { openDb, usageSince, usageTotals, localUsageByProvider, getUsageSnapshot } from "@opencode-usage/core"
 import { providerStatuses } from "@opencode-usage/core"
 import { usageTable, providersTable, fmtCost } from "@opencode-usage/core"
-import { buildTop } from "@opencode-usage/core"
+import { buildTop, RANKING_ATTRIBUTION } from "@opencode-usage/core"
 import { readBudgets, resolvePct } from "@opencode-usage/core"
 import { limitsAsMap } from "@opencode-usage/core"
 
@@ -97,7 +97,7 @@ async function cmdTop(flags: Map<string, string | boolean>, json: boolean): Prom
   const limit = typeof flags.get("--limit") === "string" ? Number(flags.get("--limit")) : 20
   const rows = await buildTop(limit)
   if (json) {
-    console.log(JSON.stringify(rows, null, 2))
+    console.log(JSON.stringify({ attribution: RANKING_ATTRIBUTION, models: rows }, null, 2))
     return
   }
   const head = ["MODEL", "NAME", "IQ", "CODING", "$/M", "IQ/$"]
@@ -115,6 +115,7 @@ async function cmdTop(flags: Map<string, string | boolean>, json: boolean): Prom
       r.value !== undefined ? r.value.toFixed(1) : "—",
     ]))
   }
+  console.log(`\n${RANKING_ATTRIBUTION}`)
 }
 
 if (import.meta.main) {
