@@ -65,8 +65,10 @@ Restart opencode after a rebuild: the bundle is read once at start.
 test renderer and prints the frame, so a layout change is visible without a
 restart of opencode. Two traps it catches:
 
-- the dialog frame is roughly 60 columns wide at its `large` size, and content
-  wider than that wraps instead of clipping;
+- the frame is 60, 88 or 116 columns wide for `medium`, `large` and `xlarge`,
+  clamped to the terminal width minus 2, and content wider than that wraps
+  instead of clipping. The stack resets to `medium`, and `setSize` only takes
+  effect when it is called from inside the mounted component;
 - text color is the `fg` prop. `color` is accepted and silently ignored, and
   `span` carries no `fg` at all.
 

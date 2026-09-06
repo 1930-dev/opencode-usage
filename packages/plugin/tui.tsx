@@ -1,29 +1,49 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiDialogStack, TuiPluginApi, TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { onMount } from "solid-js"
 import { getUsageSnapshot, startOfDayMs } from "@opencode-usage/core"
 
 const COMMAND = "opencode-usage.show"
 
-/**
- * The dialog frame gives about 61 columns at its "large" size. The table is
- * built to 57 plus one column of padding on each side; content wider than the
- * frame wraps, which is unreadable, so every column has a fixed width and every
- * row carries wrapMode="none" to clip instead.
- */
-const COLS = [
-  { title: "PROVIDER", width: 15, align: "left" },
-  { title: "MSGS", width: 4, align: "right" },
-  { title: "IN", width: 6, align: "right" },
-  { title: "OUT", width: 6, align: "right" },
-  { title: "COST", width: 8, align: "right" },
-  { title: "BUDGET", width: 14, align: "left" },
-] as const
-const BUDGET_COL = COLS.length - 1
-const TABLE_WIDTH = COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1)
-/** Whatever the bar and " 100%" do not use inside the budget column. */
-const BAR_WIDTH = 6
+/** What the host gives a dialog of each size, then clamped to the terminal. */
+const SIZE_WIDTH = { medium: 60, large: 88, xlarge: 116 } as const
+const PADDING = 1
 
 type Snapshot = Awaited<ReturnType<typeof getUsageSnapshot>>
+type Align = "left" | "right"
+interface Col {
+  title: string
+  width: number
+  align: Align
+}
+
+/**
+ * Columns are laid out for the width the frame actually has: the wide profile
+ * spells the token headers out and leaves room for the full budget label, the
+ * compact one is what fits a 60-column frame. BUDGET takes whatever is left, so
+ * a wider terminal buys a longer bar and a longer label rather than dead space.
+ */
+function columnsFor(inner: number): { cols: Col[]; bar: number } {
+  const wide = inner >= 80
+  const base: Col[] = wide
+    ? [
+        { title: "PROVIDER", width: 22, align: "left" },
+        { title: "MSGS", width: 5, align: "right" },
+        { title: "TOK IN", width: 8, align: "right" },
+        { title: "TOK OUT", width: 8, align: "right" },
+        { title: "COST", width: 10, align: "right" },
+      ]
+    : [
+        { title: "PROVIDER", width: 15, align: "left" },
+        { title: "MSGS", width: 4, align: "right" },
+        { title: "IN", width: 6, align: "right" },
+        { title: "OUT", width: 6, align: "right" },
+        { title: "COST", width: 8, align: "right" },
+      ]
+  const used = base.reduce((a, c) => a + c.width, 0) + base.length
+  const budget = Math.max(14, inner - used)
+  return { cols: [...base, { title: "BUDGET", width: budget, align: "left" }], bar: wide ? 12 : 6 }
+}
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -31,26 +51,25 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
-function cell(s: string, i: number): string {
-  const { width, align } = COLS[i]!
+function pad(s: string, width: number, align: Align): string {
   const v = s.length > width ? s.slice(0, width) : s
   return align === "right" ? v.padStart(width) : v.padEnd(width)
 }
 
-function line(values: string[]): string {
-  return values.map(cell).join(" ")
+function row(cols: Col[], values: string[]): string {
+  return cols.map((c, i) => pad(values[i] ?? "", c.width, c.align)).join(" ")
 }
 
-function progressBar(pct: number): string {
-  const filled = Math.round((Math.min(Math.max(pct, 0), 100) / 100) * BAR_WIDTH)
-  return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled)
+function progressBar(pct: number, width: number): string {
+  const filled = Math.round((Math.min(Math.max(pct, 0), 100) / 100) * width)
+  return "█".repeat(filled) + "░".repeat(width - filled)
 }
 
 /**
- * The budget column has no room for a full label next to the bar and the
- * percentage, and the labels vary in kind — "weekly", "premium/mo",
- * "1,000,000 tokens/day". What the reader needs there is the window the
- * percentage is measured over, so only that is kept.
+ * Budget labels vary in kind — "weekly", "premium/mo", "1,000,000 tokens/day".
+ * The full label is used where it fits; where it does not, only the window the
+ * percentage is measured over survives, because that is what makes the number
+ * readable.
  */
 function windowSuffix(label: string): string {
   const l = label.toLowerCase()
@@ -64,6 +83,10 @@ function windowSuffix(label: string): string {
   return ""
 }
 
+/**
+ * Theme colors arrive as RGBA objects, and only a string is known to survive the
+ * `fg` prop, so every color goes through here.
+ */
 function toHex(color: unknown, fallback: string): string {
   if (typeof color === "string") return color
   const c = color as { r?: number; g?: number; b?: number } | undefined
@@ -102,66 +125,111 @@ function barColor(pct: number, p: Palette): string {
   return p.ok
 }
 
-function Header(props: { palette: Palette }) {
-  return (
-    <box flexDirection="row" justifyContent="space-between">
-      <text fg={props.palette.text} bold>{"Usage \u2014 today"}</text>
-      <text fg={props.palette.muted}>esc</text>
-    </box>
-  )
+/**
+ * The size the frame should take. The thresholds are the width each size needs
+ * before the host clamps it to the terminal, so asking for a larger one buys
+ * nothing.
+ */
+function chooseSize(terminal: number): keyof typeof SIZE_WIDTH {
+  if (terminal >= SIZE_WIDTH.xlarge + 2) return "xlarge"
+  if (terminal >= SIZE_WIDTH.large + 2) return "large"
+  return "medium"
 }
 
-function Frame(props: { palette: Palette; children: any }) {
+/**
+ * The width the frame gives its content. Derived from the terminal rather than
+ * read back from `dialog.size`: that getter is not reactive, so a render would
+ * lay out against the size the stack had before this dialog raised it.
+ */
+function innerWidth(api: TuiPluginApi): number {
+  const terminal = (api.renderer as { width?: number } | undefined)?.width ?? SIZE_WIDTH.medium
+  return Math.min(SIZE_WIDTH[chooseSize(terminal)], terminal - 2) - PADDING * 2
+}
+
+function Frame(props: { api: TuiPluginApi; palette: Palette; children: any }) {
+  // The host resets the stack to "medium" and the internal plugins raise it from
+  // inside the mounted component, so this cannot move to the command handler.
+  onMount(() => {
+    const w = (props.api.renderer as { width?: number } | undefined)?.width ?? SIZE_WIDTH.medium
+    props.api.ui.dialog.setSize(chooseSize(w))
+  })
   return (
-    <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
-      <Header palette={props.palette} />
+    <box flexDirection="column" flexShrink={0} padding={PADDING}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={props.palette.text} bold>
+          {"Usage — today"}
+        </text>
+        <text fg={props.palette.muted}>esc</text>
+      </box>
       <text />
       {props.children}
     </box>
   )
 }
 
-function Budget(props: { pct: number; label: string; palette: Palette }) {
-  const suffix = () => {
-    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${windowSuffix(props.label)}`
-    const room = COLS[BUDGET_COL]!.width - BAR_WIDTH
-    return tail.length > room ? tail.slice(0, room) : tail.padEnd(room)
+function Budget(props: { pct: number; label: string; palette: Palette; col: Col; bar: number }) {
+  const tail = () => {
+    const head = ` ${props.pct.toFixed(0).padStart(3)}% `
+    const room = props.col.width - props.bar - head.length
+    const label = props.label.length <= room ? props.label : windowSuffix(props.label)
+    return (head + label).slice(0, props.col.width - props.bar)
   }
   return (
     <box flexDirection="row">
-      <text fg={barColor(props.pct, props.palette)} wrapMode="none">{progressBar(props.pct)}</text>
-      <text fg={props.palette.muted} wrapMode="none">{suffix()}</text>
+      <text fg={barColor(props.pct, props.palette)} wrapMode="none">
+        {progressBar(props.pct, props.bar)}
+      </text>
+      <text fg={props.palette.muted} wrapMode="none">
+        {tail()}
+      </text>
     </box>
   )
 }
 
 export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   const p = palette(props.api)
-  const rows = props.snapshot.rows.slice(0, 20)
-  const lead = (r: Snapshot["rows"][number]) =>
-    line([
+  const layout = () => columnsFor(innerWidth(props.api))
+  const lead = (cols: Col[], r: Snapshot["rows"][number]) =>
+    row(cols, [
       r.provider,
       String(r.messages),
       fmtTokens(r.tokensInput),
       fmtTokens(r.tokensOutput),
       `$${r.cost.toFixed(2)}`,
-      "",
-    ]).slice(0, TABLE_WIDTH - COLS[BUDGET_COL]!.width)
+    ]).trimEnd().padEnd(cols.slice(0, -1).reduce((a, c) => a + c.width, 0) + cols.length - 2) + " "
   return (
-    <Frame palette={p}>
-      <text fg={p.accent} wrapMode="none">{line(COLS.map((c) => c.title))}</text>
-      {rows.map((r) => {
+    <Frame api={props.api} palette={p}>
+      <text fg={p.accent} wrapMode="none">
+        {row(layout().cols, layout().cols.map((c) => c.title))}
+      </text>
+      {props.snapshot.rows.slice(0, 20).map((r) => {
         const budget = props.snapshot.pct?.[r.provider]
         return (
           <box flexDirection="row">
-            <text fg={r.messages > 0 ? p.text : p.muted} wrapMode="none">{lead(r)}</text>
-            {budget ? <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} /> : null}
+            <text fg={r.messages > 0 ? p.text : p.muted} wrapMode="none">
+              {lead(layout().cols, r)}
+            </text>
+            {budget ? (
+              <Budget
+                pct={budget.pct}
+                label={budget.label ?? budget.source}
+                palette={p}
+                col={layout().cols[layout().cols.length - 1]!}
+                bar={layout().bar}
+              />
+            ) : null}
           </box>
         )
       })}
       <text />
       <text fg={p.text} bold wrapMode="none">
-        {line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`, ""])}
+        {row(layout().cols, [
+          "TOTAL",
+          String(props.snapshot.totals.messages),
+          "",
+          "",
+          `$${props.snapshot.totals.cost.toFixed(2)}`,
+        ])}
       </text>
     </Frame>
   )
@@ -170,19 +238,15 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
 export function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
   const p = palette(props.api)
   return (
-    <Frame palette={p}>
-      <text fg={props.color ?? p.muted} wrapMode="none">{props.text}</text>
+    <Frame api={props.api} palette={p}>
+      <text fg={props.color ?? p.muted} wrapMode="none">
+        {props.text}
+      </text>
     </Frame>
   )
 }
 
-function fitSize(api: TuiPluginApi, dialog: TuiDialogStack): void {
-  const width = (api.renderer as { width?: number } | undefined)?.width ?? 128
-  dialog.setSize(width >= 128 ? "xlarge" : width >= 96 ? "large" : "medium")
-}
-
 async function show(api: TuiPluginApi, dialog: TuiDialogStack): Promise<void> {
-  fitSize(api, dialog)
   dialog.replace(() => <Message api={api} text="Loading usage…" />)
   let snapshot: Snapshot
   try {

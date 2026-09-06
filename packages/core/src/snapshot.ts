@@ -45,7 +45,11 @@ async function withConnectedProviders(rows: UsageRow[]): Promise<UsageRow[]> {
       tokensCacheRead: 0,
       tokensCacheWrite: 0,
     }))
-  return [...rows, ...idle]
+  // Used providers first, by what they cost and then by traffic; everything
+  // that ties — every idle provider included — falls back to the name.
+  return [...rows, ...idle].sort(
+    (a, b) => b.cost - a.cost || b.messages - a.messages || a.provider.localeCompare(b.provider),
+  )
 }
 
 export async function getUsageSnapshot(sinceMs: number, groupBy: "provider" | "model" | "day" | "project" | "agent", includePct: boolean): Promise<UsageSnapshot> {

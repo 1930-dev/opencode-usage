@@ -1,4 +1,7 @@
 // @bun
+// packages/plugin/tui.tsx
+import { onMount } from "solid-js";
+
 // packages/core/src/types.ts
 function startOfDayMs(now = Date.now()) {
   const d = new Date(now);
@@ -496,7 +499,7 @@ async function withConnectedProviders(rows) {
     tokensCacheRead: 0,
     tokensCacheWrite: 0
   }));
-  return [...rows, ...idle];
+  return [...rows, ...idle].sort((a, b) => b.cost - a.cost || b.messages - a.messages || a.provider.localeCompare(b.provider));
 }
 async function getUsageSnapshot(sinceMs, groupBy, includePct) {
   const db = openDb();
@@ -530,17 +533,27 @@ async function getUsageSnapshot(sinceMs, groupBy, includePct) {
 // packages/plugin/tui.tsx
 import { jsx, jsxs } from "@opentui/solid/jsx-runtime";
 var COMMAND = "opencode-usage.show";
-var COLS = [
-  { title: "PROVIDER", width: 15, align: "left" },
-  { title: "MSGS", width: 4, align: "right" },
-  { title: "IN", width: 6, align: "right" },
-  { title: "OUT", width: 6, align: "right" },
-  { title: "COST", width: 8, align: "right" },
-  { title: "BUDGET", width: 14, align: "left" }
-];
-var BUDGET_COL = COLS.length - 1;
-var TABLE_WIDTH = COLS.reduce((a, c) => a + c.width, 0) + (COLS.length - 1);
-var BAR_WIDTH = 6;
+var SIZE_WIDTH = { medium: 60, large: 88, xlarge: 116 };
+var PADDING = 1;
+function columnsFor(inner) {
+  const wide = inner >= 80;
+  const base = wide ? [
+    { title: "PROVIDER", width: 22, align: "left" },
+    { title: "MSGS", width: 5, align: "right" },
+    { title: "TOK IN", width: 8, align: "right" },
+    { title: "TOK OUT", width: 8, align: "right" },
+    { title: "COST", width: 10, align: "right" }
+  ] : [
+    { title: "PROVIDER", width: 15, align: "left" },
+    { title: "MSGS", width: 4, align: "right" },
+    { title: "IN", width: 6, align: "right" },
+    { title: "OUT", width: 6, align: "right" },
+    { title: "COST", width: 8, align: "right" }
+  ];
+  const used = base.reduce((a, c) => a + c.width, 0) + base.length;
+  const budget2 = Math.max(14, inner - used);
+  return { cols: [...base, { title: "BUDGET", width: budget2, align: "left" }], bar: wide ? 12 : 6 };
+}
 function fmtTokens(n) {
   if (n >= 1e6)
     return `${(n / 1e6).toFixed(1)}M`;
@@ -548,17 +561,16 @@ function fmtTokens(n) {
     return `${(n / 1000).toFixed(1)}K`;
   return String(n);
 }
-function cell(s, i) {
-  const { width, align } = COLS[i];
+function pad(s, width, align) {
   const v = s.length > width ? s.slice(0, width) : s;
   return align === "right" ? v.padStart(width) : v.padEnd(width);
 }
-function line(values) {
-  return values.map(cell).join(" ");
+function row(cols, values) {
+  return cols.map((c, i) => pad(values[i] ?? "", c.width, c.align)).join(" ");
 }
-function progressBar(pct) {
-  const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * BAR_WIDTH);
-  return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled);
+function progressBar(pct, width) {
+  const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * width);
+  return "\u2588".repeat(filled) + "\u2591".repeat(width - filled);
 }
 function windowSuffix(label) {
   const l = label.toLowerCase();
@@ -606,34 +618,41 @@ function barColor(pct, p) {
     return p.warn;
   return p.ok;
 }
-function Header(props) {
-  return /* @__PURE__ */ jsxs("box", {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    children: [
-      /* @__PURE__ */ jsx("text", {
-        fg: props.palette.text,
-        bold: true,
-        children: "Usage \u2014 today"
-      }),
-      /* @__PURE__ */ jsx("text", {
-        fg: props.palette.muted,
-        children: "esc"
-      })
-    ]
-  });
+function chooseSize(terminal) {
+  if (terminal >= SIZE_WIDTH.xlarge + 2)
+    return "xlarge";
+  if (terminal >= SIZE_WIDTH.large + 2)
+    return "large";
+  return "medium";
+}
+function innerWidth(api) {
+  const terminal = api.renderer?.width ?? SIZE_WIDTH.medium;
+  return Math.min(SIZE_WIDTH[chooseSize(terminal)], terminal - 2) - PADDING * 2;
 }
 function Frame(props) {
+  onMount(() => {
+    const w = props.api.renderer?.width ?? SIZE_WIDTH.medium;
+    props.api.ui.dialog.setSize(chooseSize(w));
+  });
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "column",
     flexShrink: 0,
-    paddingLeft: 1,
-    paddingRight: 1,
-    paddingTop: 1,
-    paddingBottom: 1,
+    padding: PADDING,
     children: [
-      /* @__PURE__ */ jsx(Header, {
-        palette: props.palette
+      /* @__PURE__ */ jsxs("box", {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        children: [
+          /* @__PURE__ */ jsx("text", {
+            fg: props.palette.text,
+            bold: true,
+            children: "Usage \u2014 today"
+          }),
+          /* @__PURE__ */ jsx("text", {
+            fg: props.palette.muted,
+            children: "esc"
+          })
+        ]
       }),
       /* @__PURE__ */ jsx("text", {}),
       props.children
@@ -641,10 +660,11 @@ function Frame(props) {
   });
 }
 function Budget(props) {
-  const suffix = () => {
-    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${windowSuffix(props.label)}`;
-    const room = COLS[BUDGET_COL].width - BAR_WIDTH;
-    return tail.length > room ? tail.slice(0, room) : tail.padEnd(room);
+  const tail = () => {
+    const head = ` ${props.pct.toFixed(0).padStart(3)}% `;
+    const room = props.col.width - props.bar - head.length;
+    const label = props.label.length <= room ? props.label : windowSuffix(props.label);
+    return (head + label).slice(0, props.col.width - props.bar);
   };
   return /* @__PURE__ */ jsxs("box", {
     flexDirection: "row",
@@ -652,36 +672,36 @@ function Budget(props) {
       /* @__PURE__ */ jsx("text", {
         fg: barColor(props.pct, props.palette),
         wrapMode: "none",
-        children: progressBar(props.pct)
+        children: progressBar(props.pct, props.bar)
       }),
       /* @__PURE__ */ jsx("text", {
         fg: props.palette.muted,
         wrapMode: "none",
-        children: suffix()
+        children: tail()
       })
     ]
   });
 }
 function Table(props) {
   const p = palette(props.api);
-  const rows = props.snapshot.rows.slice(0, 20);
-  const lead = (r) => line([
+  const layout = () => columnsFor(innerWidth(props.api));
+  const lead = (cols, r) => row(cols, [
     r.provider,
     String(r.messages),
     fmtTokens(r.tokensInput),
     fmtTokens(r.tokensOutput),
-    `$${r.cost.toFixed(2)}`,
-    ""
-  ]).slice(0, TABLE_WIDTH - COLS[BUDGET_COL].width);
+    `$${r.cost.toFixed(2)}`
+  ]).trimEnd().padEnd(cols.slice(0, -1).reduce((a, c) => a + c.width, 0) + cols.length - 2) + " ";
   return /* @__PURE__ */ jsxs(Frame, {
+    api: props.api,
     palette: p,
     children: [
       /* @__PURE__ */ jsx("text", {
         fg: p.accent,
         wrapMode: "none",
-        children: line(COLS.map((c) => c.title))
+        children: row(layout().cols, layout().cols.map((c) => c.title))
       }),
-      rows.map((r) => {
+      props.snapshot.rows.slice(0, 20).map((r) => {
         const budget2 = props.snapshot.pct?.[r.provider];
         return /* @__PURE__ */ jsxs("box", {
           flexDirection: "row",
@@ -689,12 +709,14 @@ function Table(props) {
             /* @__PURE__ */ jsx("text", {
               fg: r.messages > 0 ? p.text : p.muted,
               wrapMode: "none",
-              children: lead(r)
+              children: lead(layout().cols, r)
             }),
             budget2 ? /* @__PURE__ */ jsx(Budget, {
               pct: budget2.pct,
               label: budget2.label ?? budget2.source,
-              palette: p
+              palette: p,
+              col: layout().cols[layout().cols.length - 1],
+              bar: layout().bar
             }) : null
           ]
         });
@@ -704,7 +726,13 @@ function Table(props) {
         fg: p.text,
         bold: true,
         wrapMode: "none",
-        children: line(["TOTAL", String(props.snapshot.totals.messages), "", "", `$${props.snapshot.totals.cost.toFixed(2)}`, ""])
+        children: row(layout().cols, [
+          "TOTAL",
+          String(props.snapshot.totals.messages),
+          "",
+          "",
+          `$${props.snapshot.totals.cost.toFixed(2)}`
+        ])
       })
     ]
   });
@@ -712,6 +740,7 @@ function Table(props) {
 function Message(props) {
   const p = palette(props.api);
   return /* @__PURE__ */ jsx(Frame, {
+    api: props.api,
     palette: p,
     children: /* @__PURE__ */ jsx("text", {
       fg: props.color ?? p.muted,
@@ -720,12 +749,7 @@ function Message(props) {
     })
   });
 }
-function fitSize(api, dialog) {
-  const width = api.renderer?.width ?? 128;
-  dialog.setSize(width >= 128 ? "xlarge" : width >= 96 ? "large" : "medium");
-}
 async function show(api, dialog) {
-  fitSize(api, dialog);
   dialog.replace(() => /* @__PURE__ */ jsx(Message, {
     api,
     text: "Loading usage\u2026"
