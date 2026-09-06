@@ -11,10 +11,10 @@ const COMMAND = "opencode-usage.show"
  * row carries wrapMode="none" to clip instead.
  */
 const COLS = [
-  { title: "PROVIDER", width: 12, align: "left" },
+  { title: "PROVIDER", width: 15, align: "left" },
   { title: "MSGS", width: 4, align: "right" },
-  { title: "TOK IN", width: 7, align: "right" },
-  { title: "TOK OUT", width: 7, align: "right" },
+  { title: "IN", width: 6, align: "right" },
+  { title: "OUT", width: 6, align: "right" },
   { title: "COST", width: 8, align: "right" },
   { title: "BUDGET", width: 14, align: "left" },
 ] as const
@@ -47,27 +47,23 @@ function progressBar(pct: number): string {
 }
 
 /**
- * The budget column has no room for "weekly" next to the bar and the
- * percentage, and the window differs per provider, so it is abbreviated rather
- * than dropped.
+ * The budget column has no room for a full label next to the bar and the
+ * percentage, and the labels vary in kind — "weekly", "premium/mo",
+ * "1,000,000 tokens/day". What the reader needs there is the window the
+ * percentage is measured over, so only that is kept.
  */
-const WINDOW_ABBREV: Record<string, string> = {
-  daily: "d",
-  hourly: "h",
-  monthly: "mo",
-  session: "ss",
-  weekly: "wk",
-  yearly: "yr",
+function windowSuffix(label: string): string {
+  const l = label.toLowerCase()
+  const hours = l.match(/\b(\d+)\s*h\b/)
+  if (hours) return `${hours[1]}h`
+  if (/\byear|\/yr\b/.test(l)) return "yr"
+  if (/\bmonth|\/mo\b/.test(l)) return "mo"
+  if (/\bweek|\/wk\b/.test(l)) return "wk"
+  if (/\bday|daily|\/d\b/.test(l)) return "d"
+  if (/\bhour/.test(l)) return "h"
+  return ""
 }
 
-function abbrevWindow(label: string): string {
-  return WINDOW_ABBREV[label.toLowerCase()] ?? label.slice(0, 2)
-}
-
-/**
- * Theme colors arrive as RGBA objects, and only a string is known to survive the
- * `color` prop, so every color goes through here.
- */
 function toHex(color: unknown, fallback: string): string {
   if (typeof color === "string") return color
   const c = color as { r?: number; g?: number; b?: number } | undefined
@@ -127,7 +123,7 @@ function Frame(props: { palette: Palette; children: any }) {
 
 function Budget(props: { pct: number; label: string; palette: Palette }) {
   const suffix = () => {
-    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${abbrevWindow(props.label)}`
+    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${windowSuffix(props.label)}`
     const room = COLS[BUDGET_COL]!.width - BAR_WIDTH
     return tail.length > room ? tail.slice(0, room) : tail.padEnd(room)
   }
@@ -158,7 +154,7 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
         const budget = props.snapshot.pct?.[r.provider]
         return (
           <box flexDirection="row">
-            <text fg={p.text} wrapMode="none">{lead(r)}</text>
+            <text fg={r.messages > 0 ? p.text : p.muted} wrapMode="none">{lead(r)}</text>
             {budget ? <Budget pct={budget.pct} label={budget.label ?? budget.source} palette={p} /> : null}
           </box>
         )

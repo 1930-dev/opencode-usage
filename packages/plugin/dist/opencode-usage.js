@@ -473,10 +473,35 @@ function limitsAsMap() {
   return m;
 }
 // packages/core/src/snapshot.ts
+async function withConnectedProviders(rows) {
+  let connected;
+  try {
+    connected = Object.keys(await readAuth());
+  } catch {
+    return rows;
+  }
+  const seen = new Set(rows.map((r) => r.provider));
+  const idle = connected.filter((provider) => !seen.has(provider)).sort().map((provider) => ({
+    group: provider,
+    provider,
+    model: "",
+    day: "",
+    project: "",
+    agent: "",
+    messages: 0,
+    cost: 0,
+    tokensInput: 0,
+    tokensOutput: 0,
+    tokensReasoning: 0,
+    tokensCacheRead: 0,
+    tokensCacheWrite: 0
+  }));
+  return [...rows, ...idle];
+}
 async function getUsageSnapshot(sinceMs, groupBy, includePct) {
   const db = openDb();
   try {
-    const rows = usageSince(db, sinceMs, groupBy);
+    const rows = groupBy === "provider" ? await withConnectedProviders(usageSince(db, sinceMs, groupBy)) : usageSince(db, sinceMs, groupBy);
     const totals = usageTotals(db, sinceMs);
     let pct;
     if (includePct) {
@@ -506,10 +531,10 @@ async function getUsageSnapshot(sinceMs, groupBy, includePct) {
 import { jsx, jsxs } from "@opentui/solid/jsx-runtime";
 var COMMAND = "opencode-usage.show";
 var COLS = [
-  { title: "PROVIDER", width: 12, align: "left" },
+  { title: "PROVIDER", width: 15, align: "left" },
   { title: "MSGS", width: 4, align: "right" },
-  { title: "TOK IN", width: 7, align: "right" },
-  { title: "TOK OUT", width: 7, align: "right" },
+  { title: "IN", width: 6, align: "right" },
+  { title: "OUT", width: 6, align: "right" },
   { title: "COST", width: 8, align: "right" },
   { title: "BUDGET", width: 14, align: "left" }
 ];
@@ -535,16 +560,22 @@ function progressBar(pct) {
   const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 100 * BAR_WIDTH);
   return "\u2588".repeat(filled) + "\u2591".repeat(BAR_WIDTH - filled);
 }
-var WINDOW_ABBREV = {
-  daily: "d",
-  hourly: "h",
-  monthly: "mo",
-  session: "ss",
-  weekly: "wk",
-  yearly: "yr"
-};
-function abbrevWindow(label) {
-  return WINDOW_ABBREV[label.toLowerCase()] ?? label.slice(0, 2);
+function windowSuffix(label) {
+  const l = label.toLowerCase();
+  const hours = l.match(/\b(\d+)\s*h\b/);
+  if (hours)
+    return `${hours[1]}h`;
+  if (/\byear|\/yr\b/.test(l))
+    return "yr";
+  if (/\bmonth|\/mo\b/.test(l))
+    return "mo";
+  if (/\bweek|\/wk\b/.test(l))
+    return "wk";
+  if (/\bday|daily|\/d\b/.test(l))
+    return "d";
+  if (/\bhour/.test(l))
+    return "h";
+  return "";
 }
 function toHex(color, fallback) {
   if (typeof color === "string")
@@ -611,7 +642,7 @@ function Frame(props) {
 }
 function Budget(props) {
   const suffix = () => {
-    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${abbrevWindow(props.label)}`;
+    const tail = ` ${props.pct.toFixed(0).padStart(3)}% ${windowSuffix(props.label)}`;
     const room = COLS[BUDGET_COL].width - BAR_WIDTH;
     return tail.length > room ? tail.slice(0, room) : tail.padEnd(room);
   };
@@ -656,7 +687,7 @@ function Table(props) {
           flexDirection: "row",
           children: [
             /* @__PURE__ */ jsx("text", {
-              fg: p.text,
+              fg: r.messages > 0 ? p.text : p.muted,
               wrapMode: "none",
               children: lead(r)
             }),

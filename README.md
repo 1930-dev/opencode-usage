@@ -22,6 +22,7 @@ opencode-usage usage --by model         # group by model instead of provider
 opencode-usage usage --by project       # group by project directory
 opencode-usage usage --by agent         # group by agent (build/plan/etc)
 opencode-usage usage --pct              # add % BUDGET column (requires --by provider)
+#   --by provider lists every connected provider, including those idle in the window
 opencode-usage usage --json             # machine-readable output
 
 # Connected providers + live quota
