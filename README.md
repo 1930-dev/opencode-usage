@@ -5,7 +5,7 @@ Usage tracking, cost estimation, and model ranking CLI for [opencode](https://op
 ## Install
 
 ```bash
-npm install -g @agurod42/opencode-usage   # the opencode-usage CLI
+npm install -g @1930.dev/opencode-usage   # the opencode-usage CLI
 ```
 
 Requires [Bun](https://bun.sh): the CLI reads opencode's SQLite through `bun:sqlite`.
@@ -39,7 +39,7 @@ The package also ships a `/usage` slash command for the opencode TUI. It shows t
 same table as the CLI, with the % budget column drawn as a progress bar.
 
 ```bash
-opencode plugin @agurod42/opencode-usage
+opencode plugin @1930.dev/opencode-usage
 ```
 
 That installs the package and writes it into `~/.config/opencode/tui.json`. To do it
@@ -48,7 +48,7 @@ by hand:
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["@agurod42/opencode-usage"]
+  "plugin": ["@1930.dev/opencode-usage"]
 }
 ```
 
