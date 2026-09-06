@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { blendedPrice, valueScore, formatSuffix } from "../packages/core/src/ranking/metrics.ts"
+import { blendedPrice, valueScore, formatSuffix, getIntelligenceIndex } from "../packages/core/src/ranking/metrics.ts"
 
 describe("metrics", () => {
   it("blendedPrice 3:1", () => {
@@ -21,5 +21,16 @@ describe("metrics", () => {
     expect(formatSuffix({ input: 0, output: 0 }, 60)).toBe("")
     expect(formatSuffix(undefined, 60)).toBe("")
     expect(formatSuffix({ input: 2, output: 8 }, undefined)).toBe(" · $4/M")
+  })
+})
+describe("getIntelligenceIndex", () => {
+  it("reads the index when the model was evaluated", () => {
+    expect(getIntelligenceIndex({ id: "1", name: "M", slug: "m", evaluations: { artificial_analysis_intelligence_index: 61 } })).toBe(61)
+  })
+
+  it("returns nothing for a null index or no evaluations at all", () => {
+    expect(getIntelligenceIndex({ id: "1", name: "M", slug: "m", evaluations: { artificial_analysis_intelligence_index: null } })).toBeUndefined()
+    expect(getIntelligenceIndex({ id: "1", name: "M", slug: "m", evaluations: {} })).toBeUndefined()
+    expect(getIntelligenceIndex({ id: "1", name: "M", slug: "m" })).toBeUndefined()
   })
 })

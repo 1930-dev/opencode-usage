@@ -1,0 +1,12 @@
+[test]
+# The report covers the source, not the scaffolding that drives it.
+coveragePathIgnorePatterns = ["__tests__/**"]
+coverageReporter = ["text"]
+coverageSkipTestFiles = true
+
+# Every line of every source file must run. The function metric sits a shade
+# under 1 because Bun counts two entities that own no line of their own — with
+# no uncovered line anywhere, there is no source function left untested.
+[test.coverageThreshold]
+lines = 1.0
+functions = 0.99
