@@ -3,6 +3,35 @@
 Usage tracking, budget percentages and model ranking for [opencode](https://opencode.ai):
 a CLI, and a `/usage` slash command for the TUI.
 
+Every connected provider in one table, with each one's remaining budget as a
+comparable percentage — whether the provider bills in tokens, requests, credits or
+neurons.
+
+```
+ Usage — today                                                                      esc
+
+ PROVIDER               MSGS   TOK IN  TOK OUT      COST BUDGET
+ opencode-go               7        0        0     $0.00 ████████████ 100% weekly
+ nvidia                   98    10.9M    19.9K     $0.00
+ cloudflare-workers-ai     0        0        0     $0.00
+ github-copilot            1     4.2K      830    $12.35 █████░░░░░░░  42% 1M tok/day
+
+ TOTAL                   106                      $12.35
+```
+
+[![npm](https://img.shields.io/npm/v/@1930dev/opencode-usage)](https://www.npmjs.com/package/@1930dev/opencode-usage)
+[![license](https://img.shields.io/npm/l/@1930dev/opencode-usage)](./LICENSE)
+
+## Why
+
+opencode talks to many providers at once, and each one meters differently: a weekly
+window here, premium requests there, credits, neurons, tokens per day. Nothing tells
+you which one you are about to exhaust.
+
+This reads opencode's own SQLite and auth store — no configuration, no account — and
+normalizes every quota into one percentage, so the answer to "which provider still has
+room" is one glance.
+
 ## Install
 
 ```bash
