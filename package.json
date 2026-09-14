@@ -1,7 +1,7 @@
 {
   "name": "@1930dev/opencode-usage",
-  "version": "0.2.0",
-  "description": "Usage tracking, budget percentages and model ranking for opencode \u2014 CLI plus a /usage TUI plugin",
+  "version": "0.3.0",
+  "description": "Usage tracking, budget percentages and model ranking for opencode — CLI plus a /usage TUI plugin",
   "type": "module",
   "bin": {
     "opencode-usage": "./dist/cli.js"
@@ -28,7 +28,7 @@
     "tokens",
     "llm"
   ],
-  "author": "Agu Rodr\u00edguez <me@agu.uy>",
+  "author": "Agu Rodríguez <me@agu.uy>",
   "license": "MIT",
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.26",
