@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "bun:test"
 import { getJson } from "../packages/core/src/quota/shared.ts"
 import { fetchZen } from "../packages/core/src/quota/zen.ts"
+import { fetchAmd } from "../packages/core/src/quota/amd.ts"
 import { fetchZai, parseZai } from "../packages/core/src/quota/zai.ts"
 import { fetchCopilot } from "../packages/core/src/quota/copilot.ts"
 import { fetchOpenRouter } from "../packages/core/src/quota/openrouter.ts"
@@ -201,5 +202,46 @@ describe("openrouter", () => {
   it("reports a failure instead of throwing", async () => {
     stub = stubFetch(() => ({ throws: new Error("dns failure") }))
     expect(await fetchOpenRouter("sk-test")).toMatchObject({ provider: "openrouter", ok: false, detail: "dns failure" })
+  })
+})
+
+describe("amd", () => {
+  const usage = () => ({
+    status: "ok",
+    rpm_limit: 30,
+    daily_cost_limit_usd: 10,
+    daily_cost_used_usd: 1.8412,
+    daily_cost_remaining_usd: 8.1588,
+    daily_reset_timezone: "Asia/Shanghai",
+    daily_reset_at: "2026-08-26T00:00:00+08:00",
+    today: { requests: 142, errors: 3, total_tokens: 88214, prompt_tokens: 31002, completion_tokens: 57212, cost: 1.8412, last_request_at: "2026-08-25T14:22:07+08:00" },
+  })
+
+  it("reports the daily spend ceiling as the budget", async () => {
+    stub = stubFetch(() => ({ body: usage() }))
+    const quota = await fetchAmd("key")
+    expect(quota.ok).toBe(true)
+    expect(quota.budget).toEqual({ percentUsed: 18.4, label: "$10/d" })
+    expect(quota.windows[0]).toMatchObject({ label: "daily", percentUsed: 18.4, resetsAt: "2026-08-26T00:00:00+08:00" })
+    expect(quota.windows[0]!.detail).toBe("$1.8412 of $10.00")
+  })
+
+  it("reports no budget for an account the platform has not configured", async () => {
+    stub = stubFetch(() => ({ body: { status: "not_configured" } }))
+    const quota = await fetchAmd("key")
+    expect(quota).toMatchObject({ provider: "amd", ok: false, detail: "usage endpoint reports not_configured", windows: [] })
+  })
+
+  it("reports no budget for an account with no ceiling", async () => {
+    stub = stubFetch(() => ({ body: { status: "ok", daily_cost_limit_usd: 0, daily_cost_used_usd: 0 } }))
+    const quota = await fetchAmd("key")
+    expect(quota.ok).toBe(true)
+    expect(quota.budget).toBeUndefined()
+    expect(quota.windows[0]!.percentUsed).toBe(0)
+  })
+
+  it("reports a failure instead of throwing", async () => {
+    stub = stubFetch(() => ({ throws: new Error("network down") }))
+    expect(await fetchAmd("key")).toMatchObject({ provider: "amd", ok: false, detail: "network down", windows: [] })
   })
 })
