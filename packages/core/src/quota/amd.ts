@@ -1,7 +1,7 @@
 import { getJson, type ProviderQuota } from "./shared.ts"
 
 interface AmdUsage {
-  status: string
+  status?: string
   rpm_limit?: number
   daily_cost_limit_usd?: number
   daily_cost_used_usd?: number
@@ -24,9 +24,6 @@ export async function fetchAmd(key: string): Promise<ProviderQuota> {
     })) as AmdUsage
     if (data.status && data.status !== "ok") {
       return { provider: "amd", ok: false, detail: `usage endpoint reports ${data.status}`, windows: [] }
-    }
-    if (data.daily_cost_limit_usd === undefined || data.daily_cost_used_usd === undefined) {
-      return { provider: "amd", ok: false, detail: "usage endpoint answered without cost fields", windows: [] }
     }
     const limit = data.daily_cost_limit_usd ?? 0
     const used = data.daily_cost_used_usd ?? 0
