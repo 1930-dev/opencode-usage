@@ -12,7 +12,8 @@ import {
   row,
   toHex,
   widthNeeded,
-  PADDING,
+  PADDING_X,
+  PADDING_Y,
   SIZE_WIDTH,
   type Col,
   type Palette,
@@ -48,7 +49,7 @@ export function terminalWidth(api: TuiPluginApi): number {
 
 export function innerWidth(api: TuiPluginApi, needed: number): number {
   const terminal = terminalWidth(api)
-  return Math.min(SIZE_WIDTH[chooseSize(terminal, needed)], terminal - 2) - PADDING * 2
+  return Math.min(SIZE_WIDTH[chooseSize(terminal, needed)], terminal - 2) - PADDING_X * 2
 }
 
 /** The columns a budget label needs, over every provider that reports one. */
@@ -65,7 +66,7 @@ function Frame(props: { api: TuiPluginApi; palette: Palette; needed: number; chi
   // instance does not recognise, and the call would be dropped silently.
   props.api.ui.dialog.setSize(chooseSize(terminalWidth(props.api), props.needed))
   return (
-    <box flexDirection="column" flexShrink={0} padding={PADDING}>
+    <box flexDirection="column" flexShrink={0} paddingX={PADDING_X} paddingY={PADDING_Y}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={props.palette.text} bold>
           {"Usage — today"}

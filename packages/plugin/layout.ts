@@ -7,7 +7,8 @@
 
 /** What the host gives a dialog of each size, then clamped to the terminal. */
 export const SIZE_WIDTH = { medium: 60, large: 88, xlarge: 116 } as const
-export const PADDING = 1
+export const PADDING_X = 2
+export const PADDING_Y = 1
 
 export type SizeName = keyof typeof SIZE_WIDTH
 export type Align = "left" | "right"
@@ -161,7 +162,7 @@ export function barColor(pct: number, p: Palette): string {
  */
 export function chooseSize(terminal: number, needed: number): SizeName {
   const held = (s: SizeName) => terminal >= SIZE_WIDTH[s] + 2
-  if (held("large") && SIZE_WIDTH.large - PADDING * 2 >= needed) return "large"
+  if (held("large") && SIZE_WIDTH.large - PADDING_X * 2 >= needed) return "large"
   if (held("xlarge")) return "xlarge"
   if (held("large")) return "large"
   return "medium"

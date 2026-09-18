@@ -102,11 +102,11 @@ describe("terminalWidth", () => {
 
 describe("innerWidth", () => {
   it("takes the frame it chose, less the padding", () => {
-    expect(innerWidth(fakeApi(200).api, 60)).toBe(SIZE_WIDTH.large - 2)
+    expect(innerWidth(fakeApi(200).api, 60)).toBe(SIZE_WIDTH.large - 4)
   })
 
   it("never asks for more than the terminal holds", () => {
-    expect(innerWidth(fakeApi(50).api, 60)).toBe(46)
+    expect(innerWidth(fakeApi(50).api, 60)).toBe(44)
   })
 })
 
