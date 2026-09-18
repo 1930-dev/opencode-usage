@@ -58,6 +58,10 @@ opencode-usage usage --pct              # add the % BUDGET column (--by provider
 opencode-usage providers
 opencode-usage providers --no-net       # cached only
 
+# What the providers themselves answer about their budget
+opencode-usage probe                    # one free-model call per provider
+opencode-usage probe --json
+
 # Model ranking by intelligence per blended dollar
 opencode-usage top
 opencode-usage top --limit 10 --json
@@ -160,6 +164,23 @@ Normalized percentage of budget consumed per provider, from these sources (in pr
    Place at `~/.config/opencode-usage/budgets.json`.
 
 Providers without any source show `—`.
+
+## Free-model probe (`probe`)
+
+`probe` sends one minimal request against a free model per connected provider
+and reports what the answer reveals about the budget: a rate-limit header, a
+"no credits" error, or the meter itself (`usage.neurons` for Cloudflare). It
+reads the key from opencode's auth store and never prints it. Providers covered:
+
+- `cloudflare-workers-ai` — the response carries neurons per request (the free
+  tier's unit), so the probe answers whether the account can still run
+- `nvidia` — an HTTP 200 means the free per-model allowance still works
+- `orcarouter` — the `free` model answers `rate_limit_error` with a
+  `retry-after`, and credits raise the cap
+- `zai` — an HTTP 429 with `code 1113` means the balance is empty
+
+`opencode` exposes no chat API for keys and `snowflake-cortex` is read through
+its SQL quota, so both are skipped.
 
 ## Ranking (`top`)
 

@@ -1,5 +1,6 @@
 import type { UsageRow, UsageTotals } from "./types.ts"
 import type { ProviderStatus } from "./providers.ts"
+import type { ProbeResult } from "./probe.ts"
 
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
@@ -18,6 +19,14 @@ export function fmtAgo(ms: number, now = Date.now()): string {
   if (h < 1) return `${Math.max(1, Math.floor(diff / 60_000))}m ago`
   if (h < 24) return `${h}h ago`
   return `${Math.floor(h / 24)}d ago`
+}
+
+/** Formats a retry window from seconds to a size that fits a table column. */
+export function fmtRetry(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+  if (seconds < 86_400) return `${Math.ceil(seconds / 3600)}h`
+  return `${Math.ceil(seconds / 86_400)}d`
 }
 
 function pad(s: string, n: number): string {
@@ -76,6 +85,23 @@ export function providersTable(statuses: ProviderStatus[], local: Map<string, { 
     const usage = loc ? `${loc.messages} msgs, ${fmtCost(loc.cost)}` : "—"
     const last = loc ? fmtAgo(loc.lastUsedMs) : "never"
     return [s.provider, quota, usage, last]
+  })
+  return table(headers, rows)
+}
+
+/** Renders the free-model probe results: one row per provider, what the response said. */
+export function probeTable(results: ProbeResult[]): string {
+  const headers = ["PROVIDER", "TAUGHT", "SIGNAL", "RETRY"]
+  const rows = results.map((r) => {
+    if (r.status === 0) return [r.provider, "error", r.message ?? "no signal", "—"]
+    const taught = r.ok ? "yes" : "no"
+    const signal = r.ok
+      ? r.usage && Object.keys(r.usage).length > 0
+        ? Object.entries(r.usage).map(([k, v]) => `${k}=${v}`).join(", ")
+        : "http ok"
+      : r.message || (r.code ? `code ${r.code}` : `HTTP ${r.status}`)
+    const retry = r.retryAfterSeconds !== undefined ? fmtRetry(r.retryAfterSeconds) : "—"
+    return [r.provider, taught, signal, retry]
   })
   return table(headers, rows)
 }

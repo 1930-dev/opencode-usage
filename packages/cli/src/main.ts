@@ -6,7 +6,8 @@
 import { parseDuration, startOfDayMs, type GroupBy } from "@opencode-usage/core"
 import { openDb, localUsageByProvider, getUsageSnapshot } from "@opencode-usage/core"
 import { providerStatuses } from "@opencode-usage/core"
-import { usageTable, providersTable, fmtCost } from "@opencode-usage/core"
+import { runProbes, readAuth } from "@opencode-usage/core"
+import { usageTable, providersTable, probeTable, fmtCost } from "@opencode-usage/core"
 import { buildTop, RANKING_ATTRIBUTION } from "@opencode-usage/core"
 
 export const USAGE = `opencode-usage — usage tracking and model ranking for opencode
@@ -14,6 +15,7 @@ export const USAGE = `opencode-usage — usage tracking and model ranking for op
 USAGE
   opencode-usage usage  [--since 7d] [--by provider|model|day|project|agent] [--today] [--pct] [--json]
   opencode-usage providers [--no-net] [--json]
+  opencode-usage probe [--json]
   opencode-usage top [--limit 20] [--json]
 
 OPTIONS
@@ -108,6 +110,23 @@ export async function cmdProviders(flags: Flags, json: boolean): Promise<void> {
   }
 }
 
+/** Probes a free model per connected provider and reports what the answer said. */
+export async function cmdProbe(flags: Flags, json: boolean): Promise<void> {
+  const results = await runProbes()
+  if (json) {
+    console.log(JSON.stringify({ probes: results }, null, 2))
+    return
+  }
+  const auth = await readAuth()
+  const withoutProbe = Object.entries(auth)
+    .filter(([, e]) => e.key || e.access)
+    .map(([p]) => p)
+    .filter((p) => !["cloudflare-workers-ai", "nvidia", "orcarouter", "zai"].includes(p))
+    .sort()
+  console.log(probeTable(results))
+  if (withoutProbe.length > 0) console.log(`no free-model probe: ${withoutProbe.join(", ")}`)
+}
+
 const TOP_HEADERS = ["MODEL", "NAME", "IQ", "CODING", "$/M", "IQ/$"]
 const TOP_WIDTHS = [28, 26, 5, 7, 8, 6]
 
@@ -148,6 +167,7 @@ export async function run(argv: string[]): Promise<void> {
   const json = flags.has("--json")
   if (cmd === "usage") await cmdUsage(flags, json)
   else if (cmd === "providers") await cmdProviders(flags, json)
+  else if (cmd === "probe") await cmdProbe(flags, json)
   else if (cmd === "top") await cmdTop(flags, json)
   else fail(`unknown command: ${cmd}\n\n${USAGE}`)
 }
