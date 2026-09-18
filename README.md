@@ -123,7 +123,8 @@ Normalized percentage of budget consumed per provider, from these sources (in pr
    - `github-copilot`: premium requests entitlement (7000/mo)
    - `opencode-go` (Zen): rolling 5h / weekly / monthly % (binding window)
    - `openrouter`: credits used / total credits
-   - `zai`: coding plan quota
+   - `orcarouter`: spend since top-up; a per-key credit cap turns into a %
+   - `zai`: coding plan quota (needs an active GLM coding plan)
 
 2. **Documented limits** — published quotas, used when the provider reports none.
    Each one is read against the period it resets on: a daily limit against today,
@@ -138,10 +139,11 @@ Normalized percentage of budget consumed per provider, from these sources (in pr
    records tokens and requests; a credit and a neuron are the provider's own
    unit, derived from the model and the request by a rule it does not record.
    Give them a line in `budgets.json` to get a percentage in USD instead.
-   - `cloudflare-workers-ai`: 100k neurons/day (free tier)
-   - `nvidia`: 1000 credits/month (free tier)
-   - `orcarouter`: undocumented
-   - `snowflake-cortex`: 100 credits/month (paid)
+   - `cloudflare-workers-ai`: 10k neurons/day (free tier, resets 00:00 UTC)
+   - `nvidia`: credit allowance retired — the trial is rate-limited per model
+   - `opencode`: no spend API for API keys
+   - `snowflake-cortex`: 100 credits/month, billed per token
+   - `zai`: no coding plan on this key
 
 3. **budgets.json** — your monthly USD per provider, read against what the
    provider cost so far this calendar month:

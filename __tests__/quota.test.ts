@@ -5,6 +5,7 @@ import { fetchAmd } from "../packages/core/src/quota/amd.ts"
 import { fetchZai, parseZai } from "../packages/core/src/quota/zai.ts"
 import { fetchCopilot } from "../packages/core/src/quota/copilot.ts"
 import { fetchOpenRouter } from "../packages/core/src/quota/openrouter.ts"
+import { parseOrcaRouter, fetchOrcaRouter } from "../packages/core/src/quota/orcarouter.ts"
 import { stubFetch, type FetchStub } from "./support/fixtures.ts"
 
 let stub: FetchStub | undefined
@@ -243,5 +244,39 @@ describe("amd", () => {
   it("reports a failure instead of throwing", async () => {
     stub = stubFetch(() => ({ throws: new Error("network down") }))
     expect(await fetchAmd("key")).toMatchObject({ provider: "amd", ok: false, detail: "network down", windows: [] })
+  })
+})
+
+describe("orcarouter", () => {
+  const subscription = { object: "billing_subscription", has_payment_method: true, soft_limit_usd: 25, hard_limit_usd: 25, system_hard_limit_usd: 25, access_until: 0 }
+  const payAsYouGo = { object: "billing_subscription", has_payment_method: true, soft_limit_usd: 100000000, hard_limit_usd: 100000000, system_hard_limit_usd: 100000000, access_until: 0 }
+
+  it("turns a capped key into a live budget, in dollars", () => {
+    const quota = parseOrcaRouter({ total_usage: 1999.0838 }, subscription)
+    expect(quota.ok).toBe(true)
+    expect(quota.budget!.label).toBe("$25")
+    expect(quota.budget!.percentUsed).toBeCloseTo(79.96, 2)
+    expect(quota.windows[0]).toMatchObject({ label: "spend", detail: "$19.99" })
+  })
+
+  it("reports spend but no budget for pay-as-you-go", () => {
+    const quota = parseOrcaRouter({ total_usage: 1999.0838 }, payAsYouGo)
+    expect(quota.ok).toBe(true)
+    expect(quota.detail).toBe("$19.99 spent")
+    expect(quota.budget).toBeUndefined()
+    expect(quota.windows[0]!.percentUsed).toBe(0)
+  })
+
+  it("reads both endpoints through the network", async () => {
+    stub = stubFetch((url) => ({ body: url.endsWith("/usage") ? { total_usage: 500 } : payAsYouGo }))
+    const quota = await fetchOrcaRouter("sk-orca-test")
+    expect(quota.detail).toBe("$5.00 spent")
+    expect(quota.budget).toBeUndefined()
+    expect(stub.calls).toHaveLength(2)
+  })
+
+  it("reports a failure instead of throwing", async () => {
+    stub = stubFetch(() => ({ throws: new Error("dns failure") }))
+    expect(await fetchOrcaRouter("sk-orca-test")).toMatchObject({ provider: "orcarouter", ok: false, detail: "dns failure", windows: [] })
   })
 })

@@ -7,6 +7,7 @@ import { fetchOpenRouter } from "./quota/openrouter.ts"
 import { fetchCopilot } from "./quota/copilot.ts"
 import { fetchZai } from "./quota/zai.ts"
 import { fetchAmd } from "./quota/amd.ts"
+import { fetchOrcaRouter } from "./quota/orcarouter.ts"
 import type { ProviderQuota } from "./quota/shared.ts"
 
 const TTL_MS = 15 * 60 * 1000
@@ -45,6 +46,7 @@ const FETCHERS: Record<string, (secret: string) => Promise<ProviderQuota>> = {
   "github-copilot": fetchCopilot,
   zai: fetchZai,
   amd: fetchAmd,
+  orcarouter: fetchOrcaRouter,
 }
 
 export async function providerStatuses(opts: { noNet: boolean }): Promise<ProviderStatus[]> {

@@ -61,7 +61,11 @@ describe("limits", () => {
   it("writes a limit the way the provider does", () => {
     expect(limitLabel(getLimit("groq")!)).toBe("200,000 tokens/day")
     expect(limitLabel(getLimit("google")!)).toBe("1,500 requests/day")
-    expect(limitLabel(getLimit("nvidia")!)).toBe("1,000 credits/month")
+    expect(limitLabel(getLimit("snowflake-cortex")!)).toBe("100 credits/month")
+  })
+
+  it("records the workers-ai free allocation at ten thousand neurons", () => {
+    expect(getLimit("cloudflare-workers-ai")!.limit).toBe(10_000)
   })
 })
 
