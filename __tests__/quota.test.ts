@@ -348,4 +348,10 @@ describe("snowflake-cortex", () => {
   it("parses an empty result as zeroes", () => {
     expect(parseSnowflake([])).toMatchObject({ ok: true, detail: "0 tokens/30d", windows: [{ detail: "0" }, { detail: "0" }] })
   })
+
+  it("treats an unparseable body as no rows", async () => {
+    stub = stubFetch(() => ({ text: "not json" }))
+    const quota = await fetchSnowflake("jwt", { account: "XRGJSAE-FU14218" })
+    expect(quota).toMatchObject({ ok: true, detail: "0 tokens/30d", windows: [{ detail: "0" }, { detail: "0" }] })
+  })
 })

@@ -144,7 +144,7 @@ export interface FetchStub {
   restore(): void
 }
 
-type Responder = (url: string) => { status?: number; body?: unknown; throws?: Error }
+type Responder = (url: string) => { status?: number; body?: unknown; text?: string; throws?: Error }
 
 /**
  * Replaces global fetch for the duration of a test. `responder` answers by URL;
@@ -160,7 +160,8 @@ export function stubFetch(responder: Responder): FetchStub {
     const answer = responder(url)
     if (answer.throws) throw answer.throws
     const status = answer.status ?? 200
-    return new Response(JSON.stringify(answer.body ?? {}), {
+    const payload = answer.text !== undefined ? answer.text : JSON.stringify(answer.body ?? {})
+    return new Response(payload, {
       status,
       headers: { "content-type": "application/json" },
     })
