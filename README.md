@@ -124,7 +124,11 @@ Normalized percentage of budget consumed per provider, from these sources (in pr
    - `opencode-go` (Zen): rolling 5h / weekly / monthly % (binding window)
    - `openrouter`: credits used / total credits
    - `orcarouter`: spend since top-up; a per-key credit cap turns into a %
-   - `zai`: coding plan quota (needs an active GLM coding plan)
+   - `zai`: coding plan quota when the key has an active GLM plan; otherwise the
+     wallet balance (fallback)
+   - `snowflake-cortex`: tokens in the last 30d from the account usage views
+     (SQL API); the percentage comes from a `snowflake-cortex` line in
+     `budgets.json`
 
 2. **Documented limits** — published quotas, used when the provider reports none.
    Each one is read against the period it resets on: a daily limit against today,
@@ -142,8 +146,8 @@ Normalized percentage of budget consumed per provider, from these sources (in pr
    - `cloudflare-workers-ai`: 10k neurons/day (free tier, resets 00:00 UTC)
    - `nvidia`: credit allowance retired — the trial is rate-limited per model
    - `opencode`: no spend API for API keys
-   - `snowflake-cortex`: 100 credits/month, billed per token
-   - `zai`: no coding plan on this key
+   - `zai`: a key without a coding plan shows its wallet balance (live), and the
+     percentage comes from a `zai` line in `budgets.json`
 
 3. **budgets.json** — your monthly USD per provider, read against what the
    provider cost so far this calendar month:

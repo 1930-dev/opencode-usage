@@ -106,7 +106,7 @@ export const PROVIDER_LIMITS: ProviderLimit[] = [
     limit: 100,
     tier: "paid",
     source: "https://docs.snowflake.com/en/sql-reference/account-usage/cortex_ai_functions_usage_history",
-    note: "Cortex AI Functions bill per token (credits per million tokens, Service Consumption Table). Usage lives in ACCOUNT_USAGE views, which the API key alone cannot read.",
+    note: "Billed per token (Service Consumption Table). Live tokens come from ACCOUNT_USAGE.CORTEX_REST_API_USAGE_HISTORY through the SQL API with the stored JWT; the percentage needs a snowflake-cortex line in budgets.json.",
   },
   {
     provider: "zai",

@@ -2,10 +2,11 @@ import { describe, it, expect, afterEach } from "bun:test"
 import { getJson } from "../packages/core/src/quota/shared.ts"
 import { fetchZen } from "../packages/core/src/quota/zen.ts"
 import { fetchAmd } from "../packages/core/src/quota/amd.ts"
-import { fetchZai, parseZai } from "../packages/core/src/quota/zai.ts"
+import { fetchZai, parseZai, parseZaiWallet } from "../packages/core/src/quota/zai.ts"
 import { fetchCopilot } from "../packages/core/src/quota/copilot.ts"
 import { fetchOpenRouter } from "../packages/core/src/quota/openrouter.ts"
 import { parseOrcaRouter, fetchOrcaRouter } from "../packages/core/src/quota/orcarouter.ts"
+import { parseSnowflake, fetchSnowflake } from "../packages/core/src/quota/snowflake.ts"
 import { stubFetch, type FetchStub } from "./support/fixtures.ts"
 
 let stub: FetchStub | undefined
@@ -93,6 +94,37 @@ describe("zai", () => {
 
   it("reports no budget when the plan has no limits", () => {
     expect(parseZai({ success: true, data: { planName: "lite" } }).budget).toBeUndefined()
+  })
+
+  it("falls back to the wallet when the key has no coding plan", async () => {
+    stub = stubFetch((url) =>
+      url.endsWith("/quota/limit")
+        ? { body: { code: 500, msg: "当前用户不存在coding plan", success: false } }
+        : {
+            body: {
+              code: 200,
+              success: true,
+              data: { rechargeAmount: 50, giveAmount: 0, totalSpendAmount: 37.66, todaySpendAmount: 1.5, availableBalance: 12.34, frozenBalance: 0 },
+            },
+          },
+    )
+    const quota = await fetchZai("key")
+    expect(quota.ok).toBe(true)
+    expect(quota.detail).toBe("balance $12.34")
+    expect(quota.budget).toBeUndefined()
+    expect(quota.windows.map((w) => w.label)).toEqual(["balance", "spend", "today"])
+    expect(quota.windows[0]).toMatchObject({ percentUsed: 0, detail: "$12.34" })
+    expect(quota.windows[1]!.detail).toBe("$37.66")
+    expect(quota.windows[2]!.detail).toBe("$1.50")
+    expect(stub.calls).toHaveLength(2)
+  })
+
+  it("omits the today window when the wallet reports no spend for today", () => {
+    expect(parseZaiWallet({ success: true, data: { availableBalance: 5, totalSpendAmount: 2 } }).windows.map((w) => w.label)).toEqual(["balance", "spend"])
+  })
+
+  it("reports a wallet failure instead of throwing", () => {
+    expect(parseZaiWallet({ code: 500, msg: "nope", success: false })).toMatchObject({ ok: false, detail: "nope", windows: [] })
   })
 })
 
@@ -262,15 +294,16 @@ describe("orcarouter", () => {
   it("reports spend but no budget for pay-as-you-go", () => {
     const quota = parseOrcaRouter({ total_usage: 1999.0838 }, payAsYouGo)
     expect(quota.ok).toBe(true)
-    expect(quota.detail).toBe("$19.99 spent")
+    expect(quota.detail).toBe("$19.99 spent (no cap set)")
     expect(quota.budget).toBeUndefined()
     expect(quota.windows[0]!.percentUsed).toBe(0)
+    expect(quota.windows[0]!.detail).toBe("$19.99 (no cap set)")
   })
 
   it("reads both endpoints through the network", async () => {
     stub = stubFetch((url) => ({ body: url.endsWith("/usage") ? { total_usage: 500 } : payAsYouGo }))
     const quota = await fetchOrcaRouter("sk-orca-test")
-    expect(quota.detail).toBe("$5.00 spent")
+    expect(quota.detail).toBe("$5.00 spent (no cap set)")
     expect(quota.budget).toBeUndefined()
     expect(stub.calls).toHaveLength(2)
   })
@@ -278,5 +311,41 @@ describe("orcarouter", () => {
   it("reports a failure instead of throwing", async () => {
     stub = stubFetch(() => ({ throws: new Error("dns failure") }))
     expect(await fetchOrcaRouter("sk-orca-test")).toMatchObject({ provider: "orcarouter", ok: false, detail: "dns failure", windows: [] })
+  })
+})
+
+describe("snowflake-cortex", () => {
+  it("reads the 30d and today token totals from the account usage view", async () => {
+    stub = stubFetch(() => ({ body: { data: [["120000", "5000000"]] } }))
+    const quota = await fetchSnowflake("jwt", { account: "xrgjsae-fu14218" })
+    expect(quota.ok).toBe(true)
+    expect(quota.detail).toBe("5,000,000 tokens/30d")
+    expect(quota.windows.map((w) => w.label)).toEqual(["tokens/mo", "today"])
+    expect(quota.windows[0]).toMatchObject({ percentUsed: 0, detail: "5,000,000" })
+    expect(quota.windows[1]!.detail).toBe("120,000")
+    expect(quota.budget).toBeUndefined()
+  })
+
+  it("requires the account in metadata before any call", async () => {
+    stub = stubFetch(() => ({ body: { data: [] } }))
+    const quota = await fetchSnowflake("jwt")
+    expect(quota).toMatchObject({ provider: "snowflake-cortex", ok: false, detail: "metadata.account is required", windows: [] })
+    expect(stub.calls).toHaveLength(0)
+  })
+
+  it("reports a SQL error from the statement API", async () => {
+    stub = stubFetch(() => ({ status: 422, body: { message: "SQL compilation error: invalid identifier" } }))
+    const quota = await fetchSnowflake("jwt", { account: "XRGJSAE-FU14218" })
+    expect(quota).toMatchObject({ ok: false, detail: "SQL compilation error: invalid identifier", windows: [] })
+  })
+
+  it("reports a failure instead of throwing", async () => {
+    stub = stubFetch(() => ({ throws: new Error("network down") }))
+    const quota = await fetchSnowflake("jwt", { account: "XRGJSAE-FU14218" })
+    expect(quota).toMatchObject({ provider: "snowflake-cortex", ok: false, detail: "network down", windows: [] })
+  })
+
+  it("parses an empty result as zeroes", () => {
+    expect(parseSnowflake([])).toMatchObject({ ok: true, detail: "0 tokens/30d", windows: [{ detail: "0" }, { detail: "0" }] })
   })
 })

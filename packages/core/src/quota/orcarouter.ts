@@ -30,11 +30,13 @@ export function parseOrcaRouter(usage: OrcaUsage, subscription: OrcaSubscription
   const cap = hard > 0 && hard < NO_CAP ? hard : soft > 0 && soft < NO_CAP ? soft : 0
   const capped = cap > 0
   const pct = capped ? (spent / cap) * 100 : 0
+  const hint = capped ? "" : " (no cap set)"
+  const detail = `$${spent.toFixed(2)} spent${hint}`
   return {
     provider: "orcarouter",
     ok: true,
-    detail: `$${spent.toFixed(2)} spent`,
-    windows: [{ label: "spend", percentUsed: pct, detail: `$${spent.toFixed(2)}` }],
+    detail,
+    windows: [{ label: "spend", percentUsed: pct, detail: `$${spent.toFixed(2)}${hint}` }],
     budget: capped ? { percentUsed: pct, label: `$${cap}` } : undefined,
     raw: { usage, subscription },
   }

@@ -8,6 +8,7 @@ import { fetchCopilot } from "./quota/copilot.ts"
 import { fetchZai } from "./quota/zai.ts"
 import { fetchAmd } from "./quota/amd.ts"
 import { fetchOrcaRouter } from "./quota/orcarouter.ts"
+import { fetchSnowflake } from "./quota/snowflake.ts"
 import type { ProviderQuota } from "./quota/shared.ts"
 
 const TTL_MS = 15 * 60 * 1000
@@ -40,13 +41,16 @@ async function writeCache(quotas: Record<string, ProviderQuota>): Promise<void> 
   await writeFile(path.join(cacheDir(), "quota.json"), JSON.stringify(file))
 }
 
-const FETCHERS: Record<string, (secret: string) => Promise<ProviderQuota>> = {
+type Fetcher = (secret: string, metadata?: Record<string, unknown>) => Promise<ProviderQuota>
+
+const FETCHERS: Record<string, Fetcher> = {
   "opencode-go": fetchZen,
   openrouter: fetchOpenRouter,
   "github-copilot": fetchCopilot,
   zai: fetchZai,
   amd: fetchAmd,
   orcarouter: fetchOrcaRouter,
+  "snowflake-cortex": fetchSnowflake,
 }
 
 export async function providerStatuses(opts: { noNet: boolean }): Promise<ProviderStatus[]> {
@@ -69,7 +73,7 @@ export async function providerStatuses(opts: { noNet: boolean }): Promise<Provid
         const fetcher = FETCHERS[p]
         const secret = authSecret(auth[p])
         if (!fetcher || !secret) return null
-        return fetcher(secret)
+        return fetcher(secret, auth[p].metadata)
       }),
     )
     for (const q of live) {
