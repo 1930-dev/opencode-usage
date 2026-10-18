@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiDialogStack, TuiPluginApi, TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { Plugin, type Context } from "@opencode/plugin/tui"
 import { getUsageSnapshot, startOfDayMs } from "@opencode-usage/core"
 import {
   barColor,
@@ -19,36 +19,55 @@ import {
   type Palette,
 } from "./layout.ts"
 
-const COMMAND = "opencode-usage.show"
+const COMMAND = "opencode-usage.usage"
 /** Rows the dialog draws before it stops; a longer table would not fit anyway. */
 const MAX_ROWS = 20
 
 type Snapshot = Awaited<ReturnType<typeof getUsageSnapshot>>
 
-export function palette(api: TuiPluginApi): Palette {
-  const t = api.theme?.current as Record<string, unknown> | undefined
+/** The theme tokens this plugin reads. Every level is optional: a host that has not resolved them yet still has to render. */
+interface ResolvedThemeLike {
+  text?: {
+    base?: unknown
+    muted?: unknown
+    action?: { primary?: { base?: unknown } }
+    feedback?: {
+      success?: { base?: unknown }
+      warning?: { base?: unknown }
+      error?: { base?: unknown }
+    }
+  }
+}
+
+/**
+ * OpenCode resolves its semantic tokens to an RGBA, which is what the `fg` prop
+ * takes. Every read is optional so a host that has not resolved the theme yet
+ * falls back to this plugin's own colors instead of throwing inside a render.
+ */
+export function palette(context: Context): Palette {
+  const t = context.theme as ResolvedThemeLike | undefined
+  const text = t?.text
   return {
-    accent: toHex(t?.primary, "#a277ff"),
-    text: toHex(t?.text, "#e5e5e5"),
-    muted: toHex(t?.textMuted, "#8a8a8a"),
-    subtle: toHex(t?.borderSubtle, "#4a4a4a"),
-    ok: toHex(t?.success, "#4ade80"),
-    warn: toHex(t?.warning, "#facc15"),
-    danger: toHex(t?.error, "#f87171"),
+    accent: toHex(text?.action?.primary?.base, "#a277ff"),
+    text: toHex(text?.base, "#e5e5e5"),
+    muted: toHex(text?.muted, "#8a8a8a"),
+    ok: toHex(text?.feedback?.success?.base, "#4ade80"),
+    warn: toHex(text?.feedback?.warning?.base, "#facc15"),
+    danger: toHex(text?.feedback?.error?.base, "#f87171"),
   }
 }
 
 /**
  * The width the frame gives its content. Derived from the terminal rather than
- * read back from `dialog.size`: that getter is not reactive, so a render would
- * lay out against the size the stack had before this dialog raised it.
+ * read back from the dialog size: the size getter is not reactive, so a render
+ * would lay out against the size the host had before this dialog raised it.
  */
-export function terminalWidth(api: TuiPluginApi): number {
-  return (api.renderer as { width?: number } | undefined)?.width ?? SIZE_WIDTH.medium
+export function terminalWidth(context: Context): number {
+  return (context.renderer as { width?: number } | undefined)?.width || SIZE_WIDTH.medium
 }
 
-export function innerWidth(api: TuiPluginApi, needed: number): number {
-  const terminal = terminalWidth(api)
+export function innerWidth(context: Context, needed: number): number {
+  const terminal = terminalWidth(context)
   return Math.min(SIZE_WIDTH[chooseSize(terminal, needed)], terminal - 2) - PADDING_X * 2
 }
 
@@ -58,13 +77,13 @@ export function neededWidth(snapshot: Snapshot): number {
   return widthNeeded(Math.max(0, ...labels))
 }
 
-function Frame(props: { api: TuiPluginApi; palette: Palette; needed: number; children: any }) {
-  // The host resets the stack to "medium" and only honours setSize from inside
-  // the mounted component, so this cannot move to the command handler. It runs
-  // in the component body rather than onMount so the plugin needs no solid-js
-  // import: that would be a second copy of solid, whose owner the host's
-  // instance does not recognise, and the call would be dropped silently.
-  props.api.ui.dialog.setSize(chooseSize(terminalWidth(props.api), props.needed))
+function Frame(props: { context: Context; palette: Palette; needed: number; children: any }) {
+  // The host resets the dialog to "medium" and only honours set from inside the
+  // mounted component, so this cannot move to the setup function. It runs in the
+  // component body rather than onMount so the plugin needs no solid-js import:
+  // that would be a second copy of solid, whose owner the host's instance does
+  // not recognise, and the call would be dropped silently.
+  props.context.ui.dialog.set({ size: chooseSize(terminalWidth(props.context), props.needed) })
   return (
     <box flexDirection="column" flexShrink={0} paddingX={PADDING_X} paddingY={PADDING_Y}>
       <box flexDirection="row" justifyContent="space-between">
@@ -108,12 +127,12 @@ function leadCells(cols: Col[], r: Snapshot["rows"][number]): string {
   )
 }
 
-export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
-  const p = palette(props.api)
+export function Table(props: { context: Context; snapshot: Snapshot }) {
+  const p = palette(props.context)
   const needed = neededWidth(props.snapshot)
-  const layout = () => columnsFor(innerWidth(props.api, needed))
+  const layout = () => columnsFor(innerWidth(props.context, needed))
   return (
-    <Frame api={props.api} palette={p} needed={needed}>
+    <Frame context={props.context} palette={p} needed={needed}>
       <text fg={p.accent} wrapMode="none">
         {row(layout().cols, layout().cols.map((c) => c.title))}
       </text>
@@ -150,10 +169,10 @@ export function Table(props: { api: TuiPluginApi; snapshot: Snapshot }) {
   )
 }
 
-export function Message(props: { api: TuiPluginApi; text: string; color?: string }) {
-  const p = palette(props.api)
+export function Message(props: { context: Context; text: string; color?: string }) {
+  const p = palette(props.context)
   return (
-    <Frame api={props.api} palette={p} needed={0}>
+    <Frame context={props.context} palette={p} needed={0}>
       <text fg={props.color ?? p.muted} wrapMode="none">
         {props.text}
       </text>
@@ -161,49 +180,37 @@ export function Message(props: { api: TuiPluginApi; text: string; color?: string
   )
 }
 
-export async function show(api: TuiPluginApi, dialog: TuiDialogStack): Promise<void> {
-  dialog.replace(() => <Message api={api} text="Loading usage…" />)
+export async function show(context: Context): Promise<void> {
+  context.ui.dialog.show(() => <Message context={context} text="Loading usage…" />)
   let snapshot: Snapshot
   try {
     snapshot = await getUsageSnapshot(startOfDayMs(), "provider", true)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    dialog.replace(() => <Message api={api} text={`Failed to read usage: ${message}`} color={palette(api).danger} />)
+    context.ui.dialog.show(() => (
+      <Message context={context} text={`Failed to read usage: ${message}`} color={palette(context).danger} />
+    ))
     return
   }
-  dialog.replace(() => <Table api={api} snapshot={snapshot} />)
+  context.ui.dialog.show(() => <Table context={context} snapshot={snapshot} />)
 }
 
-export const tui: TuiPlugin = async (api) => {
-  const keymap = api.keymap as unknown as {
-    registerLayer?: (layer: { commands: unknown[] }) => unknown
-  }
-  if (typeof keymap.registerLayer === "function") {
-    keymap.registerLayer({
+export default Plugin.define({
+  id: "opencode-usage",
+  setup(context) {
+    context.keymap.layer(() => ({
+      mode: "global",
       commands: [
         {
-          namespace: "palette",
-          name: COMMAND,
+          id: COMMAND,
           title: "Usage",
-          desc: "Show opencode usage and budget per provider",
-          category: "Usage",
-          slashName: "usage",
-          run: () => show(api, api.ui.dialog),
+          description: "Show opencode usage and budget per provider",
+          group: "Usage",
+          palette: true,
+          slash: { name: "usage" },
+          run: () => show(context),
         },
       ],
-    })
-    return
-  }
-  api.command?.register(() => [
-    {
-      title: "Usage",
-      description: "Show opencode usage and budget per provider",
-      value: COMMAND,
-      category: "Usage",
-      slash: { name: "usage" },
-      onSelect: (dialog) => show(api, dialog ?? api.ui.dialog),
-    },
-  ])
-}
-
-export default { id: "opencode-usage", tui } satisfies TuiPluginModule
+    }))
+  },
+}) satisfies Plugin.Definition

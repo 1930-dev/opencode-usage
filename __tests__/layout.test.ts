@@ -22,7 +22,6 @@ const PALETTE: Palette = {
   accent: "#a277ff",
   text: "#e5e5e5",
   muted: "#8a8a8a",
-  subtle: "#4a4a4a",
   ok: "#4ade80",
   warn: "#facc15",
   danger: "#f87171",

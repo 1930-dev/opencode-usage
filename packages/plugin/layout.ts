@@ -138,7 +138,6 @@ export interface Palette {
   accent: string
   text: string
   muted: string
-  subtle: string
   ok: string
   warn: string
   danger: string

@@ -2,20 +2,27 @@
 import { describe, it, expect, afterEach } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { jsx } from "@opentui/solid/jsx-runtime"
-import plugin, { Message, Table, innerWidth, neededWidth, palette, show, terminalWidth, tui } from "../packages/plugin/tui.tsx"
+import plugin, { Message, Table, innerWidth, neededWidth, palette, show, terminalWidth } from "../packages/plugin/tui.tsx"
 import { SIZE_WIDTH } from "../packages/plugin/layout.ts"
 import { makeSandbox, stubFetch, type FetchStub, type Sandbox } from "./support/fixtures.ts"
 
-type Api = Parameters<typeof palette>[0]
+type Context = Parameters<typeof palette>[0]
 
+const rgb = (r: number, g: number, b: number) => ({ r, g, b })
+
+/** The theme tokens the plugin reads, with the values the old V1 theme carried. */
 const THEME = {
-  primary: { r: 0.79, g: 0.55, b: 0.24 },
-  text: { r: 0.1, g: 0.1, b: 0.1 },
-  textMuted: { r: 0.45, g: 0.45, b: 0.45 },
-  borderSubtle: { r: 0.8, g: 0.8, b: 0.8 },
-  success: { r: 0.1, g: 0.6, b: 0.3 },
-  warning: { r: 0.7, g: 0.5, b: 0 },
-  error: { r: 0.8, g: 0.2, b: 0.2 },
+  text: {
+    base: rgb(0.1, 0.1, 0.1),
+    muted: rgb(0.45, 0.45, 0.45),
+    action: { primary: { base: rgb(0.79, 0.55, 0.24) } },
+    feedback: {
+      success: { base: rgb(0.1, 0.6, 0.3) },
+      warning: { base: rgb(0.7, 0.5, 0) },
+      error: { base: rgb(0.8, 0.2, 0.2) },
+    },
+  },
+  border: { base: rgb(0.8, 0.8, 0.8) },
 }
 
 const SNAPSHOT: any = {
@@ -32,20 +39,20 @@ const SNAPSHOT: any = {
   },
 }
 
-interface FakeApi {
-  api: Api
+interface FakeContext {
+  context: Context
   sizes: string[]
 }
 
-function fakeApi(terminal: number, theme: unknown = THEME): FakeApi {
+function fakeContext(terminal: number, theme: unknown = THEME): FakeContext {
   const sizes: string[] = []
   return {
     sizes,
-    api: {
+    context: {
       renderer: { width: terminal },
-      ui: { dialog: { setSize: (s: string) => sizes.push(s) } },
-      theme: { current: theme },
-    } as unknown as Api,
+      ui: { dialog: { set: (options: { size?: string }) => sizes.push(options.size ?? "") } },
+      theme,
+    } as unknown as Context,
   }
 }
 
@@ -77,36 +84,44 @@ afterEach(() => {
 })
 
 describe("palette", () => {
-  it("converts every theme color to a hex string", () => {
-    const p = palette(fakeApi(100).api)
+  it("converts every theme token to a hex string", () => {
+    const p = palette(fakeContext(100).context)
     expect(p.accent).toBe("#c98c3d")
     expect(Object.values(p).every((c) => /^#[0-9a-f]{6}$/.test(c))).toBe(true)
   })
 
   it("falls back to its own colors when the host exposes no theme", () => {
-    expect(palette({} as Api).accent).toBe("#a277ff")
-    expect(palette(fakeApi(100, null).api).text).toBe("#e5e5e5")
+    expect(palette({} as Context).accent).toBe("#a277ff")
+    expect(palette(fakeContext(100, null).context).text).toBe("#e5e5e5")
+  })
+
+  it("falls back per token when the theme is only partly resolved", () => {
+    const partial = { text: { base: rgb(0, 0, 0) } }
+    const p = palette({ theme: partial } as unknown as Context)
+    expect(p.text).toBe("#000000")
+    expect(p.accent).toBe("#a277ff")
+    expect(p.warn).toBe("#facc15")
   })
 })
 
 describe("terminalWidth", () => {
   it("reads the renderer", () => {
-    expect(terminalWidth(fakeApi(137).api)).toBe(137)
+    expect(terminalWidth(fakeContext(137).context)).toBe(137)
   })
 
   it("assumes the smallest frame when the host exposes no renderer", () => {
-    expect(terminalWidth({} as Api)).toBe(SIZE_WIDTH.medium)
-    expect(terminalWidth({ renderer: {} } as Api)).toBe(SIZE_WIDTH.medium)
+    expect(terminalWidth({} as Context)).toBe(SIZE_WIDTH.medium)
+    expect(terminalWidth({ renderer: {} } as unknown as Context)).toBe(SIZE_WIDTH.medium)
   })
 })
 
 describe("innerWidth", () => {
   it("takes the frame it chose, less the padding", () => {
-    expect(innerWidth(fakeApi(200).api, 60)).toBe(SIZE_WIDTH.large - 4)
+    expect(innerWidth(fakeContext(200).context, 60)).toBe(SIZE_WIDTH.large - 4)
   })
 
   it("never asks for more than the terminal holds", () => {
-    expect(innerWidth(fakeApi(50).api, 60)).toBe(44)
+    expect(innerWidth(fakeContext(50).context, 60)).toBe(44)
   })
 })
 
@@ -128,8 +143,8 @@ describe("neededWidth", () => {
 
 describe("Table", () => {
   it("draws a header, every row, the bars and the total", async () => {
-    const { api, sizes } = fakeApi(200)
-    const lines = await render(() => jsx(Table, { api, snapshot: SNAPSHOT }), SIZE_WIDTH.large)
+    const { context, sizes } = fakeContext(200)
+    const lines = await render(() => jsx(Table, { context, snapshot: SNAPSHOT }), SIZE_WIDTH.large)
     expect(sizes).toContain("large")
     expect(lines[0]).toContain("Usage — today")
     expect(lines[0]).toContain("esc")
@@ -147,8 +162,8 @@ describe("Table", () => {
   })
 
   it("uses the compact headers in a narrow terminal", async () => {
-    const { api, sizes } = fakeApi(70)
-    const lines = await render(() => jsx(Table, { api, snapshot: SNAPSHOT }), SIZE_WIDTH.medium)
+    const { context, sizes } = fakeContext(70)
+    const lines = await render(() => jsx(Table, { context, snapshot: SNAPSHOT }), SIZE_WIDTH.medium)
     expect(sizes).toContain("medium")
     expect(lines[1]).toContain("OUT")
     expect(lines[1]).not.toContain("TOK OUT")
@@ -156,14 +171,14 @@ describe("Table", () => {
 
   it("asks for the widest frame only when a label needs it", async () => {
     const long: any = { ...SNAPSHOT, pct: { "opencode-go": { pct: 50, source: "limits", label: "1,000,000,000 tokens/day and then some more" } } }
-    const { api, sizes } = fakeApi(200)
-    await render(() => jsx(Table, { api, snapshot: long }), SIZE_WIDTH.xlarge)
+    const { context, sizes } = fakeContext(200)
+    await render(() => jsx(Table, { context, snapshot: long }), SIZE_WIDTH.xlarge)
     expect(sizes).toContain("xlarge")
   })
 
   it("leaves the budget column empty for a provider with no source", async () => {
-    const { api } = fakeApi(200)
-    const lines = await render(() => jsx(Table, { api, snapshot: SNAPSHOT }), SIZE_WIDTH.large)
+    const { context } = fakeContext(200)
+    const lines = await render(() => jsx(Table, { context, snapshot: SNAPSHOT }), SIZE_WIDTH.large)
     expect(lines.find((l) => l.includes("nvidia"))).not.toContain("█")
   })
 
@@ -172,37 +187,38 @@ describe("Table", () => {
       rows: Array.from({ length: 30 }, (_, i) => ({ provider: `provider-${i}`, messages: 1, cost: 0, tokensInput: 0, tokensOutput: 0 })),
       totals: { messages: 30, cost: 0 },
     }
-    const { api } = fakeApi(200)
-    const lines = await render(() => jsx(Table, { api, snapshot: many }), SIZE_WIDTH.large)
+    const { context } = fakeContext(200)
+    const lines = await render(() => jsx(Table, { context, snapshot: many }), SIZE_WIDTH.large)
     expect(lines.filter((l) => l.includes("provider-"))).toHaveLength(20)
   })
 
   it("renders a snapshot with no rows at all", async () => {
-    const { api } = fakeApi(200)
-    const lines = await render(() => jsx(Table, { api, snapshot: { rows: [], totals: { messages: 0, cost: 0 } } as any }), SIZE_WIDTH.large)
+    const { context } = fakeContext(200)
+    const lines = await render(() => jsx(Table, { context, snapshot: { rows: [], totals: { messages: 0, cost: 0 } } as any }), SIZE_WIDTH.large)
     expect(lines.at(-1)).toContain("TOTAL")
   })
 })
 
 describe("Message", () => {
   it("draws the text inside the frame", async () => {
-    const { api } = fakeApi(200)
-    const lines = await render(() => jsx(Message, { api, text: "Loading usage…" }), SIZE_WIDTH.large)
+    const { context } = fakeContext(200)
+    const lines = await render(() => jsx(Message, { context, text: "Loading usage…" }), SIZE_WIDTH.large)
     expect(lines[0]).toContain("Usage — today")
     expect(lines.some((l) => l.includes("Loading usage…"))).toBe(true)
   })
 
   it("takes a color when it is given one", async () => {
-    const { api } = fakeApi(200)
-    const lines = await render(() => jsx(Message, { api, text: "Boom", color: "#ff0000" }), SIZE_WIDTH.large)
+    const { context } = fakeContext(200)
+    const lines = await render(() => jsx(Message, { context, text: "Boom", color: "#ff0000" }), SIZE_WIDTH.large)
     expect(lines.some((l) => l.includes("Boom"))).toBe(true)
   })
 })
 
 describe("show", () => {
-  function fakeDialog(): { replace: (fn: () => unknown) => void; frames: (() => unknown)[] } {
+  /** V2 has no `replace`: showing a dialog again is what swaps the content. */
+  function fakeDialog(): { show: (fn: () => unknown) => void; frames: (() => unknown)[] } {
     const frames: (() => unknown)[] = []
-    return { frames, replace: (fn: () => unknown) => frames.push(fn) }
+    return { frames, show: (fn: () => unknown) => frames.push(fn) }
   }
 
   it("shows a loading frame and then the table", async () => {
@@ -210,7 +226,9 @@ describe("show", () => {
     sandbox.writeAuth({ groq: { type: "api", key: "g" } })
     stub = stubFetch(() => ({ status: 500 }))
     const dialog = fakeDialog()
-    await show(fakeApi(200).api, dialog as never)
+    const { context } = fakeContext(200)
+    ;(context as any).ui.dialog.show = dialog.show
+    await show(context)
     expect(dialog.frames).toHaveLength(2)
     const lines = await render(dialog.frames[1]!, SIZE_WIDTH.large)
     expect(lines.some((l) => l.includes("groq"))).toBe(true)
@@ -220,69 +238,53 @@ describe("show", () => {
     sandbox = makeSandbox()
     await Bun.write(sandbox.dbPath, "not a database")
     const dialog = fakeDialog()
-    await show(fakeApi(200).api, dialog as never)
+    const { context } = fakeContext(200)
+    ;(context as any).ui.dialog.show = dialog.show
+    await show(context)
     const lines = await render(dialog.frames[1]!, SIZE_WIDTH.large)
     expect(lines.some((l) => l.includes("Failed to read usage"))).toBe(true)
   })
 })
 
-describe("tui", () => {
-  const command = {
-    title: "Usage",
-    slashName: "usage",
+describe("plugin", () => {
+  function host(): { context: Context; layers: any[] } {
+    const layers: any[] = []
+    const { context } = fakeContext(100)
+    ;(context as any).keymap = { layer: (factory: () => unknown) => layers.push(factory()) }
+    return { context, layers }
   }
 
-  it("registers a keymap layer when the host has one", async () => {
-    const layers: any[] = []
-    const api: any = { ...fakeApi(100).api, keymap: { registerLayer: (l: unknown) => layers.push(l) } }
-    await tui(api)
+  it("declares a stable id", () => {
+    expect(plugin.id).toBe("opencode-usage")
+  })
+
+  it("registers a global keymap layer holding the palette and slash command", () => {
+    const { context, layers } = host()
+    plugin.setup(context)
     expect(layers).toHaveLength(1)
-    const registered = layers[0].commands[0]
-    expect(registered).toMatchObject({ title: command.title, slashName: command.slashName, namespace: "palette" })
-    expect(typeof registered.run).toBe("function")
+    expect(layers[0].mode).toBe("global")
+    const command = layers[0].commands[0]
+    expect(command).toMatchObject({
+      id: "opencode-usage.usage",
+      title: "Usage",
+      group: "Usage",
+      palette: true,
+      slash: { name: "usage" },
+    })
+    expect(typeof command.run).toBe("function")
   })
 
-  it("falls back to the command registry on an older host", async () => {
-    const registered: any[] = []
-    const api: any = { ...fakeApi(100).api, keymap: {}, command: { register: (fn: () => unknown[]) => registered.push(...fn()) } }
-    await tui(api)
-    expect(registered[0]).toMatchObject({ title: "Usage", value: "opencode-usage.show" })
-    expect(registered[0].slash).toEqual({ name: "usage" })
-    expect(typeof registered[0].onSelect).toBe("function")
-  })
-
-  it("does not fail on a host that offers neither", async () => {
-    const api: any = { ...fakeApi(100).api, keymap: {} }
-    await expect(tui(api)).resolves.toBeUndefined()
-  })
-
-  it("opens the dialog from either registration path", async () => {
+  it("opens the dialog when the command runs", async () => {
     sandbox = makeSandbox()
     sandbox.writeAuth({ groq: { type: "api", key: "g" } })
     stub = stubFetch(() => ({ status: 500 }))
+    const { context, layers } = host()
     const frames: (() => unknown)[] = []
-    const dialog = { replace: (fn: () => unknown) => frames.push(fn) }
-    const layers: any[] = []
-    const api: any = {
-      renderer: { width: 100 },
-      ui: { dialog: { ...dialog, setSize: () => {} } },
-      theme: { current: THEME },
-      keymap: { registerLayer: (l: unknown) => layers.push(l) },
-    }
-    await tui(api)
+    ;(context as any).ui.dialog.show = (fn: () => unknown) => frames.push(fn)
+    plugin.setup(context)
     await layers[0].commands[0].run()
     expect(frames.length).toBeGreaterThan(0)
-
-    const registered: any[] = []
-    const legacy: any = { ...api, keymap: {}, command: { register: (fn: () => unknown[]) => registered.push(...fn()) } }
-    await tui(legacy)
-    await registered[0].onSelect(undefined)
-    await registered[0].onSelect({ ...dialog, setSize: () => {} })
-    expect(frames.length).toBeGreaterThan(2)
-  })
-
-  it("exports the module shape opencode loads", () => {
-    expect(plugin.id).toBe("opencode-usage")
-    expect(plugin.tui).toBe(tui)
+    const lines = await render(frames.at(-1)!, SIZE_WIDTH.large)
+    expect(lines.some((l) => l.includes("groq"))).toBe(true)
   })
 })

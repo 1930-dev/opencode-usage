@@ -31,9 +31,9 @@
   "author": "Agu Rodríguez <me@agu.uy>",
   "license": "MIT",
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.18.26",
-    "@opentui/core": "0.5.10",
-    "@opentui/solid": "^0.5.10",
+    "@opencode/plugin": "2.0.32",
+    "@opentui/core": "0.5.17",
+    "@opentui/solid": "0.5.17",
     "@types/bun": "latest"
   },
   "workspaces": [
@@ -53,9 +53,21 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.18",
-    "@opentui/core": ">=0.5",
-    "@opentui/solid": ">=0.5"
+    "@opencode/plugin": ">=2",
+    "@opentui/core": ">=0.5.17",
+    "@opentui/solid": ">=0.5.17",
+    "solid-js": ">=1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   },
   "bugs": {
     "url": "https://github.com/1930-dev/opencode-usage/issues"

@@ -12,14 +12,25 @@ import { Table } from "../../dist/tui.js"
 
 const SIZE_WIDTH: Record<string, number> = { medium: 60, large: 88, xlarge: 116 }
 
+/**
+ * The slice of a ResolvedTheme the plugin reads, with the tokens OpenCode
+ * resolves. RGBA stands in for whatever the real theme resolves to: `toHex`
+ * only reads `r`, `g` and `b`.
+ */
+const rgb = (r: number, g: number, b: number) => ({ r, g, b })
+
 const theme = {
-  primary: { r: 0.79, g: 0.55, b: 0.24 },
-  text: { r: 0.1, g: 0.1, b: 0.1 },
-  textMuted: { r: 0.45, g: 0.45, b: 0.45 },
-  borderSubtle: { r: 0.8, g: 0.8, b: 0.8 },
-  success: { r: 0.1, g: 0.6, b: 0.3 },
-  warning: { r: 0.7, g: 0.5, b: 0 },
-  error: { r: 0.8, g: 0.2, b: 0.2 },
+  text: {
+    base: rgb(0.9, 0.9, 0.9),
+    muted: rgb(0.45, 0.45, 0.45),
+    action: { primary: { base: rgb(0.79, 0.55, 0.24) } },
+    feedback: {
+      success: { base: rgb(0.1, 0.6, 0.3) },
+      warning: { base: rgb(0.7, 0.5, 0) },
+      error: { base: rgb(0.8, 0.2, 0.2) },
+    },
+  },
+  border: { base: rgb(0.8, 0.8, 0.8) },
 }
 
 const snapshot: any = {
@@ -38,12 +49,12 @@ const snapshot: any = {
 
 async function render(terminal: number, frame: number): Promise<{ size: string; lines: string[] }> {
   let size = ""
-  const api: any = {
+  const context: any = {
     renderer: { width: terminal },
-    ui: { dialog: { setSize: (s: string) => (size = s) } },
-    theme: { current: theme },
+    ui: { dialog: { set: (options: { size?: string }) => (size = options.size ?? size) } },
+    theme,
   }
-  const setup = await testRender(() => jsx(Table, { api, snapshot }), { width: frame, height: 24 })
+  const setup = await testRender(() => jsx(Table, { context, snapshot }), { width: frame, height: 24 })
   await setup.flush()
   const lines = setup.captureCharFrame().split("\n").map((l) => l.replace(/\s+$/, ""))
   setup.renderer.destroy?.()

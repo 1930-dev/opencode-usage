@@ -4,9 +4,9 @@
  *   dist/cli.js  — the opencode-usage binary, named by bin
  *
  * Both inline @opencode-usage/core, so the published package has no workspace
- * dependency to resolve. @opencode-ai/* and @opentui/* stay external: the host
- * maps those specifiers to its own instances at runtime, and a bundled second
- * copy has its calls dropped silently.
+ * dependency to resolve. @opencode/plugin, @opentui/* and solid-js stay
+ * external: the host maps those specifiers to its own instances at runtime, and
+ * a bundled second copy has its calls dropped silently.
  */
 import { resolve } from "path"
 
@@ -14,7 +14,7 @@ process.env.NODE_ENV = "production"
 
 const ROOT = resolve(import.meta.dir, "..")
 const DIST = resolve(ROOT, "dist")
-const EXTERNAL = ["@opencode-ai/plugin", "@opencode-ai/plugin/tui", "@opencode-ai/sdk", "@opentui/*", "solid-js", "solid-js/*"]
+const EXTERNAL = ["@opencode/plugin", "@opencode/plugin/*", "@opentui/*", "solid-js", "solid-js/*"]
 
 async function build(entry: string, out: string, shebang = false): Promise<void> {
   const result = await Bun.build({
