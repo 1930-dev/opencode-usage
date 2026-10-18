@@ -32,6 +32,11 @@ export interface Sandbox {
   budgetsPath: string
   /** Writes `auth.json`; every key is a connected provider. */
   writeAuth(store: Record<string, { type: string; key?: string; access?: string; metadata?: Record<string, unknown> }>): void
+  /**
+   * Creates the `credential` table OpenCode V2 keeps credentials in, the way V2
+   * writes it: one row per account, `value` a JSON blob.
+   */
+  writeCredentials(rows: { integration: string; value: unknown; active?: number | null; updatedMs?: number }[]): void
   writeBudgets(budgets: Record<string, number>): void
   /** Writes the quota cache the way providers.ts expects to read it. */
   writeQuotaCache(fetchedAt: number, quotas: Record<string, unknown>): void
@@ -46,6 +51,18 @@ const SCHEMA = `CREATE TABLE message (
   time_created integer NOT NULL,
   time_updated integer NOT NULL,
   data text NOT NULL
+)`
+
+/** The table OpenCode V2 keeps credentials in, absent on a V1 database. */
+const CREDENTIAL_SCHEMA = `CREATE TABLE credential (
+  id text PRIMARY KEY,
+  integration_id text NOT NULL,
+  label text,
+  value text NOT NULL,
+  method_id text,
+  active integer,
+  time_created integer,
+  time_updated integer
 )`
 
 function messageData(seed: MessageSeed): string {
@@ -109,6 +126,26 @@ export function makeSandbox(messages: MessageSeed[] = []): Sandbox {
     budgetsPath,
     writeAuth(store) {
       writeFileSync(authPath, JSON.stringify(store))
+    },
+    writeCredentials(rows) {
+      const conn = new Database(dbPath)
+      conn.exec(CREDENTIAL_SCHEMA)
+      const insert = conn.prepare(
+        "INSERT INTO credential (id, integration_id, label, value, method_id, active, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      rows.forEach((row, i) => {
+        insert.run(
+          `cred-${i}`,
+          row.integration,
+          "API key",
+          typeof row.value === "string" ? row.value : JSON.stringify(row.value),
+          null,
+          row.active === undefined ? null : row.active,
+          row.updatedMs ?? i,
+          row.updatedMs ?? i,
+        )
+      })
+      conn.close()
     },
     writeBudgets(budgets) {
       writeFileSync(budgetsPath, JSON.stringify(budgets))

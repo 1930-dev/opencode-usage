@@ -206,15 +206,17 @@ table and carried in `--json`.
 - [opencode](https://opencode.ai) with existing sessions, at
   `~/.local/share/opencode/opencode.db`
 - For the `/usage` dialog: OpenCode V2. V1 is not supported.
-- For live quota: provider credentials already configured in opencode, at
-  `~/.local/share/opencode/auth.json`
+- For live quota: provider credentials already configured in opencode. V2 keeps
+  them in its own database and this reads them from there; V1 keeps them at
+  `~/.local/share/opencode/auth.json` and this falls back to that.
 
 ## Configuration
 
 - `AA_API_KEY` — Artificial Analysis key, used by `top` for the intelligence indices.
   Optional: without it `top` still prints prices, only without `IQ` and `IQ/$`.
   A free key is at [artificialanalysis.ai/data-api](https://artificialanalysis.ai/data-api)
-- `OPENCODE_AUTH_PATH` — override the path to opencode's `auth.json`
+- `OPENCODE_AUTH_PATH` — override the path to opencode's `auth.json`, the V1
+  credential file. It is read only when the database holds no credentials.
 - `OPENCODE_DB_PATH` — override the path to opencode's database
 - `OPENCODE_USAGE_BUDGETS` — override the path to `budgets.json`
 - `OPENCODE_USAGE_CACHE` — cache directory (default `~/.cache/opencode-usage`)
