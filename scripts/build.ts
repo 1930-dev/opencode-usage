@@ -1,12 +1,13 @@
 /**
- * Builds the two published entry points into dist/:
- *   dist/tui.js  — the opencode TUI plugin, named by exports["./tui"]
- *   dist/cli.js  — the opencode-usage binary, named by bin
+ * Builds the three published entry points into dist/:
+ *   dist/plugin.js — the plugin's main export, named by exports["."]
+ *   dist/tui.js    — the opencode CLI plugin, named by exports["./tui"]
+ *   dist/cli.js    — the opencode-usage binary, named by bin
  *
- * Both inline @opencode-usage/core, so the published package has no workspace
- * dependency to resolve. @opencode/plugin, @opentui/* and solid-js stay
- * external: the host maps those specifiers to its own instances at runtime, and
- * a bundled second copy has its calls dropped silently.
+ * The plugin entrypoints both inline @opencode-usage/core, so the published
+ * package has no workspace dependency to resolve. @opencode/plugin, @opentui/*
+ * and solid-js stay external: the host maps those specifiers to its own
+ * instances at runtime, and a bundled second copy has its calls dropped silently.
  */
 import { resolve } from "path"
 
@@ -45,5 +46,6 @@ async function build(entry: string, out: string, shebang = false): Promise<void>
   console.log(`built ${path}`)
 }
 
+await build("packages/plugin/plugin.ts", "plugin")
 await build("packages/plugin/tui.tsx", "tui")
 await build("packages/cli/src/cli.ts", "cli", true)
